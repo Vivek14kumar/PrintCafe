@@ -2,6 +2,7 @@ import './globals.css';
 import { Inter } from 'next/font/google';
 import { AuthProvider } from './Providers';
 import ConditionalLayout from '@/components/ConditionalLayout'; // 🌟 नया Wrapper इम्पोर्ट किया
+import { Analytics } from "@vercel/analytics/next"
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -18,6 +19,7 @@ export default function RootLayout({ children }) {
           {/* 🌟 सारा मैजिक अब इस Wrapper के अंदर होगा */}
           <ConditionalLayout>
             {children}
+            <Analytics/>
           </ConditionalLayout>
         </AuthProvider>
       </body>
