@@ -1,0 +1,51 @@
+import { NextResponse } from 'next/server';
+import connectToDatabase from '@/lib/mongodb';
+import Cafe from '../models/Cafe';
+import Ledger from '../models/Ledger';
+import { getServerSession } from "next-auth/next";
+
+export async function GET(request) {
+  try {
+    await connectToDatabase();
+    
+    // 1. चेक करें कि कौन लॉगिन है
+    const session = await getServerSession();
+    if (!session || !session.user) {
+      return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
+    }
+
+    // 2. कैफे निकालें
+    const cafe = await Cafe.findOne({ email: session.user.email });
+    if (!cafe) {
+      return NextResponse.json({ success: false, message: 'Cafe not found' }, { status: 404 });
+    }
+
+    // 3. इस कैफे की Ledger एंट्रीज़ निकालें (सबसे नई सबसे ऊपर)
+    const ledgerEntries = await Ledger.find({ cafeId: cafe._id })
+      .sort({ createdAt: -1 })
+      .limit(50); // पिछले 50 ट्रांज़ैक्शन दिखा रहे हैं
+
+    // 4. डेटा को Frontend के हिसाब से फॉर्मेट करें
+    const formattedTransactions = ledgerEntries.map(entry => ({
+      id: entry._id.toString().slice(-6).toUpperCase(), // ID के आखिरी 6 अक्षर (जैसे: A4B9X1)
+      type: entry.transactionType,
+      amount: entry.amount,
+      desc: entry.description,
+      date: new Date(entry.createdAt).toLocaleString('en-GB', {
+        day: '2-digit', month: 'short', year: 'numeric', 
+        hour: '2-digit', minute: '2-digit'
+      })
+    }));
+
+    return NextResponse.json({ 
+      success: true, 
+      walletBalance: cafe.walletBalance || 0,
+      walletType: cafe.walletType || 'credit',
+      transactions: formattedTransactions 
+    });
+
+  } catch (error) {
+    console.error("Wallet API Error:", error);
+    return NextResponse.json({ success: false, message: 'Server Error' }, { status: 500 });
+  }
+}

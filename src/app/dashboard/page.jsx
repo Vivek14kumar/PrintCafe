@@ -1,0 +1,545 @@
+"use client";
+import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { useSession } from 'next-auth/react';
+// 🌟 1. Pusher इम्पोर्ट करें
+import Pusher from 'pusher-js'; 
+import { Wallet, PlusCircle, Clock, CheckCircle, XCircle, Printer, RefreshCw, Eye, Smartphone, Banknote, ShieldAlert, X, TrendingUp, Infinity, Zap } from 'lucide-react';
+
+export default function DashboardPage() {
+  const { data: session, status } = useSession();
+  
+  const [walletBalance, setWalletBalance] = useState(0);
+  const [walletType, setWalletType] = useState('credit');
+  const [printQueue, setPrintQueue] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(null); 
+  const [previewJob, setPreviewJob] = useState(null);
+  const [earnings, setEarnings] = useState({ today: 0, month: 0, total: 0 });
+  
+  // 🌟 2. Shop Code स्टेट (Pusher चैनल के लिए)
+  const [shopCode, setShopCode] = useState(null);
+
+  // Kiosk Mode State
+  const [kioskMode, setKioskMode] = useState(false);
+
+  // Print Modal States
+  const [printModalJob, setPrintModalJob] = useState(null);
+  const [pdfBlobUrl, setPdfBlobUrl] = useState(null);
+  const [recentPrints, setRecentPrints] = useState([]); 
+
+  useEffect(() => {
+    const savedKioskSetting = localStorage.getItem('kioskMode');
+    if (savedKioskSetting) setKioskMode(JSON.parse(savedKioskSetting));
+  }, []);
+
+  const fetchDashboardData = async () => {
+    try {
+      const res = await fetch('/api/dashboard');
+      const data = await res.json();
+      if (data.success) {
+        setWalletBalance(data.walletBalance);
+        setWalletType(data.walletType);
+        setPrintQueue(data.queue);
+        setShopCode(data.shopCode); // 🌟 API से shopCode सेट करें
+        setEarnings({
+          today: data.stats.todayEarnings || 0,
+          month: data.stats.monthlyEarnings || 0,
+          total: data.stats.totalEarnings || 0
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching data", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 🌟 3. पुराना Polling (setInterval) हटा दिया गया है
+  useEffect(() => {
+    if (status === 'authenticated') {
+      fetchDashboardData();
+      // Polling Removed: const interval = setInterval(fetchDashboardData, 5000); 
+    }
+  }, [status]);
+
+  // 🌟 4. PUSHER MAGIC: रियल-टाइम लिसनर (Real-time Listener)
+  useEffect(() => {
+    // अगर shopCode नहीं मिला है तो Pusher कनेक्ट न करें
+    if (!shopCode) return;
+
+    // Pusher इनिशियलाइज़ करें
+    const pusher = new Pusher(process.env.NEXT_PUBLIC_PUSHER_KEY, {
+      cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER,
+    });
+
+    // अपनी दुकान वाले चैनल से जुड़ें (Subscribe)
+    const channel = pusher.subscribe(`shop-${shopCode}`);
+
+    // 'incoming-print' इवेंट का इंतज़ार करें
+    channel.bind('incoming-print', (newJob) => {
+      console.log("🔥 New Print Job Arrived:", newJob);
+      
+      // नया जॉब सबसे ऊपर जोड़ दें (बिना पेज रिफ्रेश किए!)
+      setPrintQueue((prevQueue) => [newJob, ...prevQueue]);
+      
+      // PRO TIP: अगर आप चाहें तो यहाँ नोटिफिकेशन साउंड प्ले कर सकते हैं
+      // const audio = new Audio('/notification.mp3');
+      // audio.play().catch(e => console.log("Audio play failed"));
+    });
+
+    // Cleanup: जब कैफे वाला पेज बंद करे तो कनेक्शन तोड़ दें
+    return () => {
+      pusher.unsubscribe(`shop-${shopCode}`);
+    };
+  }, [shopCode]); // shopCode मिलने के बाद ही यह चलेगा
+  
+  // पैसे काटने का कॉमन फंक्शन
+  const triggerDeduction = async (jobId) => {
+    try {
+      const res = await fetch('/api/jobs/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId, action: 'approve' })
+      });
+      const data = await res.json();
+      
+      if (data.success) {
+        setPrintQueue(prevQueue => prevQueue.filter(q => q._id !== jobId));
+        
+        const completedJob = { ...printModalJob, printedAt: new Date(), backupUrl: pdfBlobUrl };
+        setRecentPrints(prev => [completedJob, ...prev]);
+
+        setTimeout(() => {
+          setRecentPrints(prev => prev.filter(job => job._id !== jobId));
+          if (completedJob.backupUrl && !completedJob.backupUrl.includes('docs.google.com')) {
+            URL.revokeObjectURL(completedJob.backupUrl); 
+          }
+        }, 10 * 60 * 1000);
+
+        closePrintFrame();
+        
+        // पैसे कटने के बाद बैलेंस अपडेट करने के लिए एक बार डेटा मंगा लें
+        fetchDashboardData(); 
+      } else {
+        alert(data.message || "Wallet deduction failed! Please recharge.");
+      }
+    } catch (apiErr) {
+      console.error("Auto deduction failed", apiErr);
+    }
+  };
+
+  const openPrintFrame = async (job) => {
+    setActionLoading(job._id);
+    try {
+      if (job.frontFileUrl && job.backFileUrl) {
+        const htmlContent = `
+          <html>
+            <head>
+              <style>
+                body { 
+                  margin: 0; 
+                  display: flex; 
+                  flex-direction: row; 
+                  justify-content: center; 
+                  align-items: flex-start; 
+                  gap: 15px; 
+                  background: white; 
+                  padding-top: 40px;
+                }
+                img { 
+                  width: 45%; 
+                  max-height: 50vh; 
+                  object-fit: contain; 
+                  padding: 2px;
+                }
+                @media print {
+                  @page { margin: 10mm; }
+                  body { padding-top: 20px; }
+                  img { page-break-inside: avoid; }
+                }
+              </style>
+            </head>
+            <body oncontextmenu="return false;">
+              <img src="${job.frontFileUrl}" crossorigin="anonymous" />
+              <img src="${job.backFileUrl}" crossorigin="anonymous" />
+            </body>
+          </html>
+        `;
+        const htmlBlob = new Blob([htmlContent], { type: 'text/html' });
+        setPdfBlobUrl(URL.createObjectURL(htmlBlob));
+        setPrintModalJob(job);
+        setPreviewJob(null);
+        return;
+      }
+
+      const fileResponse = await fetch(job.fileUrl);
+      if (!fileResponse.ok) throw new Error("CORS Blocked");
+      
+      const rawBlob = await fileResponse.blob();
+      const secureBlob = new Blob([rawBlob], { type: 'application/pdf' });
+      
+      const securedUrl = URL.createObjectURL(secureBlob) + '#toolbar=0&navpanes=0&scrollbar=0';
+      
+      setPdfBlobUrl(securedUrl);
+      setPrintModalJob(job);
+      setPreviewJob(null);
+
+    } catch (error) {
+      console.warn("Direct load failed, using Google Docs Fallback");
+      setPdfBlobUrl(`https://docs.google.com/gview?url=${job.fileUrl}&embedded=true`);
+      setPrintModalJob({ ...job, isCorsFallback: true });
+      setPreviewJob(null);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const executeWindowPrint = () => {
+    if (printModalJob.isCorsFallback) {
+      printJS({
+        printable: printModalJob.fileUrl,
+        type: printModalJob.fileUrl.toLowerCase().endsWith('.pdf') ? 'pdf' : 'image',
+        showModal: true,
+        modalMessage: 'Sending document to printer...',
+        onPrintDialogClose: () => triggerDeduction(printModalJob._id)
+      });
+      return;
+    }
+    
+    const iframe = document.getElementById('visible-print-frame');
+    if (iframe) {
+      const onPrintDialogClose = () => {
+        triggerDeduction(printModalJob._id);
+        window.removeEventListener('focus', onPrintDialogClose);
+      };
+
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+
+      setTimeout(() => {
+        window.addEventListener('focus', onPrintDialogClose);
+      }, 1000);
+    }
+  };
+
+  const closePrintFrame = () => {
+    setPrintModalJob(null);
+    if (pdfBlobUrl && !pdfBlobUrl.includes('docs.google.com')) {
+      URL.revokeObjectURL(pdfBlobUrl); 
+    }
+    setPdfBlobUrl(null);
+  };
+
+  const handleReject = async (job) => {
+    if (!window.confirm("Are you sure you want to reject and delete this print request?")) return;
+    
+    setActionLoading(job._id);
+    try {
+      const res = await fetch('/api/jobs/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId: job._id, action: 'reject' })
+      });
+      const result = await res.json();
+      if (result.success) {
+        // सीधा State से हटा दें (API कॉल बचाने के लिए)
+        setPrintQueue(prevQueue => prevQueue.filter(q => q._id !== job._id));
+      }
+    } catch (error) {
+      alert("Something went wrong!");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  if (status === 'loading' || loading) {
+    return <div className="min-h-screen flex items-center justify-center bg-gray-50"><RefreshCw className="animate-spin text-blue-500 w-10 h-10" /></div>;
+  }
+
+  return (
+    <div className="p-6 md:p-8 bg-gray-50 min-h-screen">
+      
+      {/* Header & Stats */}
+      <header className="mb-8">
+        <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-3xl font-extrabold text-gray-900">Dashboard</h2>
+            <p className="text-gray-500 font-medium mt-1">Manage print queue and verify payments securely.</p>
+          </div>
+        </div>
+        
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200 flex flex-col justify-center relative overflow-hidden">
+            <div className="absolute -right-4 -top-4 opacity-5"><TrendingUp className="w-24 h-24" /></div>
+            <p className="text-xs text-gray-500 font-bold uppercase tracking-wide">Today's Income</p>
+            <p className="text-3xl font-black text-emerald-600 mt-1">₹{earnings.today.toFixed(2)}</p>
+          </div>
+          <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200 flex flex-col justify-center relative overflow-hidden">
+            <div className="absolute -right-4 -top-4 opacity-5"><TrendingUp className="w-24 h-24" /></div>
+            <p className="text-xs text-gray-500 font-bold uppercase tracking-wide">This Month</p>
+            <p className="text-3xl font-black text-blue-600 mt-1">₹{earnings.month.toFixed(2)}</p>
+          </div>
+          <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200 flex flex-col justify-center relative overflow-hidden">
+            <div className="absolute -right-4 -top-4 opacity-5"><TrendingUp className="w-24 h-24" /></div>
+            <p className="text-xs text-gray-500 font-bold uppercase tracking-wide">Lifetime Income</p>
+            <p className="text-3xl font-black text-gray-900 mt-1">₹{earnings.total.toFixed(2)}</p>
+          </div>
+          <div className="bg-gray-900 p-5 rounded-2xl shadow-md border border-gray-800 flex flex-col justify-center relative overflow-hidden text-white">
+            <div className="flex justify-between items-start">
+              <div>
+                <div className="flex items-center gap-2">
+                  <p className="text-xs text-gray-400 font-bold uppercase tracking-wide">Wallet Balance</p>
+                  <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ${walletType === 'unlimited' ? 'bg-indigo-500/30 text-indigo-200' : 'bg-gray-700 text-gray-300'}`}>
+                    {walletType}
+                  </span>
+                </div>
+                <p className={`text-3xl font-black leading-none mt-1 ${walletType !== 'unlimited' && walletBalance < 10 ? 'text-red-400' : 'text-white'}`}>
+                  {walletType === 'unlimited' ? 'Unlimited' : `${walletBalance} Cr`}
+                </p>
+              </div>
+              <div className="bg-gray-800 p-2.5 rounded-xl">
+                {walletType === 'unlimited' ? <Infinity className="w-5 h-5 text-indigo-400" /> : <Wallet className="w-5 h-5 text-gray-300" />}
+              </div>
+            </div>
+            {walletType !== 'unlimited' && (
+              <Link href={'/dashboard/wallet'} className="mt-3 bg-white/10 hover:bg-white/20 text-white text-xs font-bold py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 transition w-full">
+                <PlusCircle className="w-3.5 h-3.5" /> Recharge Now
+              </Link>
+            )}
+          </div>
+        </div>
+      </header>
+
+      {/* Live Queue Section */}
+      <section className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-white">
+          <h3 className="text-lg font-black text-gray-800 flex items-center gap-2">
+            <Clock className="w-5 h-5 text-blue-600" /> Live Print Queue
+          </h3>
+          <span className="bg-blue-50 text-blue-700 px-4 py-1.5 rounded-full text-sm font-bold border border-blue-100">
+            {printQueue.length} Pending
+          </span>
+        </div>
+        
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-200">
+                <th className="p-4 font-bold">Document Info</th>
+                <th className="p-4 font-bold">Print Settings</th>
+                <th className="p-4 font-bold">Payment Status</th>
+                <th className="p-4 font-bold text-right">Review & Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {printQueue.map((job) => (
+                <tr key={job._id} className="hover:bg-blue-50/30 transition group">
+                  <td className="p-4">
+                    <div className="flex flex-col">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="bg-gray-900 text-white text-xs font-black px-2 py-0.5 rounded">#{job.tokenNumber}</span>
+                        <span className="text-sm font-bold text-gray-800">{job.customerName}</span>
+                      </div>
+                      <span className="font-bold text-gray-900 flex items-center gap-2">
+                        {job.docCategory} {job.docCategory !== 'Document' && 'Card'}
+                      </span>
+                    </div>
+                  </td>
+                  
+                  <td className="p-4">
+                    <div className="flex flex-col">
+                      <span className="font-bold text-gray-800">{job.printType} Print</span>
+                      <span className="text-xs text-gray-600 font-medium">Pages: {job.pageRange}</span>
+                      <span className="text-[10px] text-gray-500">Copies: {job.copies}</span>
+                    </div>
+                  </td>
+                  
+                  <td className="p-4">
+                    <div className="flex flex-col items-start gap-1">
+                      <span className="text-lg font-black text-gray-900">₹{job.totalAmount}</span>
+                      {job.paymentMethod === 'UPI' ? (
+                          <span className="inline-flex items-center gap-1.5 bg-purple-50 text-purple-700 border border-purple-200 px-2.5 py-1 rounded-lg text-xs font-bold">
+                            <Smartphone className="w-3.5 h-3.5" /> Check UPI
+                          </span>
+                      ) : (
+                          <span className="inline-flex items-center gap-1.5 bg-green-50 text-green-700 border border-green-200 px-2.5 py-1 rounded-lg text-xs font-bold">
+                            <Banknote className="w-3.5 h-3.5" /> Collect Cash
+                          </span>
+                      )}
+                    </div>
+                  </td>
+                  
+                  <td className="p-4 text-right">
+                    <div className="flex justify-end gap-2">
+                      <button onClick={() => openPrintFrame(job)} disabled={actionLoading === job._id} className={`${kioskMode ? 'bg-yellow-500 hover:bg-yellow-600' : 'bg-blue-600 hover:bg-blue-700'} text-white p-2.5 rounded-xl transition disabled:opacity-50 flex items-center gap-1 shadow-sm`} title="Print Document">
+                        {actionLoading === job._id ? <RefreshCw className="w-4 h-4 animate-spin" /> : (kioskMode ? <Zap className="w-4 h-4" /> : <Printer className="w-4 h-4" />)}
+                        <span className="text-xs font-bold hidden sm:inline">{kioskMode ? 'Fast Print' : 'Print'}</span>
+                      </button>
+
+                      <button onClick={() => handleReject(job)} disabled={actionLoading === job._id} className="bg-white hover:bg-red-50 text-red-500 border border-gray-200 p-2.5 rounded-xl transition disabled:opacity-50" title="Reject">
+                        <XCircle className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              
+              {printQueue.length === 0 && (
+                <tr>
+                  <td colSpan="4" className="p-16 text-center">
+                    <div className="flex flex-col items-center justify-center">
+                      <div className="bg-gray-50 p-4 rounded-full mb-3">
+                        <Printer className="w-8 h-8 text-gray-400" />
+                      </div>
+                      <p className="font-bold text-gray-800 text-lg">Queue is Empty</p>
+                      <p className="text-sm text-gray-500 mt-1">Waiting for customers to send documents...</p>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      
+      {/* ========================================== */}
+      {/* 🚀 RECENT PRINTS (10 MINUTE BACKUP BUFFER) */}
+      {/* ========================================== */}
+      {recentPrints.length > 0 && (
+        <section className="mt-8 bg-white rounded-2xl shadow-sm border border-orange-200 overflow-hidden relative">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-orange-50 rounded-full blur-3xl -z-10 opacity-50 translate-x-1/2 -translate-y-1/2"></div>
+          
+          <div className="p-5 border-b border-orange-100 flex justify-between items-center bg-orange-50/30">
+            <div>
+              <h3 className="text-lg font-black text-orange-800 flex items-center gap-2">
+                <Clock className="w-5 h-5 text-orange-600" /> Recent Prints (Backup)
+              </h3>
+              <p className="text-xs text-orange-600 font-medium mt-1">
+                Paper jam? Reprint from here for free. Files will auto-delete in 10 minutes.
+              </p>
+            </div>
+            <span className="bg-orange-100 text-orange-800 px-3 py-1 rounded-lg text-xs font-bold border border-orange-200">
+              {recentPrints.length} Saved
+            </span>
+          </div>
+          
+          <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {recentPrints.map((job) => (
+              <div key={`recent-${job._id}`} className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md transition group flex flex-col justify-between">
+                <div>
+                  <div className="flex justify-between items-start mb-2">
+                    <span className="bg-gray-100 text-gray-600 text-[10px] font-black px-2 py-1 rounded uppercase tracking-wider">
+                      #{job.tokenNumber}
+                    </span>
+                    <span className="text-[10px] font-bold text-gray-400">
+                      {job.printedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  <h4 className="font-bold text-gray-900 text-sm">{job.customerName || 'Customer'}</h4>
+                  <p className="text-xs text-gray-500 font-medium truncate">{job.docCategory}</p>
+                </div>
+                
+                <div className="mt-4 pt-4 border-t border-gray-100 flex gap-2">
+                  <button 
+                    onClick={() => {
+                      const printFrame = document.createElement('iframe');
+                      printFrame.style.display = 'none';
+                      printFrame.src = job.backupUrl;
+                      document.body.appendChild(printFrame);
+                      printFrame.onload = () => {
+                        printFrame.contentWindow.focus();
+                        printFrame.contentWindow.print();
+                        setTimeout(() => document.body.removeChild(printFrame), 5000);
+                      };
+                    }}
+                    className="flex-1 bg-orange-100 hover:bg-orange-200 text-orange-700 py-2 rounded-lg text-xs font-bold transition flex justify-center items-center gap-1.5"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" /> Free Reprint
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ========================================== */}
+      {/* 🚀 THE NEW VISIBLE PRINT FRAME MODAL (BLANK PAGE FIX) */}
+      {/* ========================================== */}
+      {printModalJob && pdfBlobUrl && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-gray-900/90 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-5xl h-[90vh] rounded-3xl shadow-2xl flex flex-col overflow-hidden border-2 border-blue-500">
+            
+            <div className="p-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+              <div>
+                <h3 className="font-black text-gray-900 text-xl flex items-center gap-2">
+                  <Printer className="w-6 h-6 text-blue-600" /> Print Ready
+                </h3>
+                {kioskMode ? (
+                  <p className="text-xs text-yellow-600 font-bold mt-1">⚡ Kiosk Mode ON: Sending to printer automatically...</p>
+                ) : (
+                  <p className="text-xs text-gray-500 font-medium mt-1">Check the document below. Click 'Print Now' to send to printer.</p>
+                )}
+              </div>
+              <button onClick={closePrintFrame} className="p-2 bg-gray-200 hover:bg-red-100 hover:text-red-600 rounded-full transition">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* 🌟 VISIBLE IFRAME WITH ANTI-CHEAT SHIELD */}
+            <div 
+              className="flex-1 bg-gray-200 relative overflow-hidden"
+              onContextMenu={(e) => e.preventDefault()} 
+            >
+              <div 
+                className="absolute top-0 left-0 w-full h-[60px] z-10 bg-transparent cursor-not-allowed" 
+                title="Security Protected"
+              ></div>
+
+              <iframe 
+                id="visible-print-frame"
+                src={pdfBlobUrl} 
+                className={`w-full h-full border-0 relative z-0 ${printModalJob?.printType === 'BW' ? 'grayscale opacity-90' : ''}`}
+                title="PDF Print Frame" 
+                onLoad={() => {
+                  if (kioskMode && !printModalJob?.isCorsFallback) {
+                    setTimeout(executeWindowPrint, 800); 
+                  }
+                }}
+              />
+            </div>
+
+            <div className="p-5 bg-white border-t border-gray-100 flex justify-between items-center gap-4">
+              <div className="flex items-center gap-3">
+                <span className="text-lg font-black text-gray-900">
+                  ₹{printModalJob.totalAmount} <span className="text-sm font-medium text-gray-500">({printModalJob.paymentMethod})</span>
+                </span>
+                <span className={`px-2 py-1 rounded text-xs font-bold ${printModalJob.printType?.toLowerCase().includes('color') ? 'bg-pink-100 text-pink-700' : 'bg-gray-100 text-gray-700'}`}>
+                  {printModalJob.printType} Print
+                </span>
+              </div>
+              
+              <div className="flex gap-3">
+                <button onClick={closePrintFrame} className="px-5 py-3 rounded-xl font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 transition">
+                  Cancel
+                </button>
+
+                <button 
+                  onClick={executeWindowPrint} 
+                  className={`px-8 py-3 rounded-xl font-black text-white transition flex items-center justify-center gap-2 shadow-lg ${kioskMode ? 'bg-yellow-500 hover:bg-yellow-600 shadow-yellow-500/30' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/30'}`}
+                >
+                  {kioskMode ? <Zap className="w-5 h-5" /> : <Printer className="w-5 h-5" />}
+                  {kioskMode ? 'Auto-Printing...' : 'Print Now'}
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}
