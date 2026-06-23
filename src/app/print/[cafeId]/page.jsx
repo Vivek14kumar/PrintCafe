@@ -4,7 +4,7 @@ import { useParams } from 'next/navigation';
 import { 
   UploadCloud, FileText, RefreshCw, CheckCircle, Store, AlertCircle, 
   Loader2, CreditCard, UserSquare, Smartphone, Banknote, Image as ImageIcon, 
-  X, Printer, Receipt,IndianRupee, FileStack, ChevronRight, Trash2 
+  X, Lock, Printer, Receipt,IndianRupee, FileStack, ChevronRight, Trash2 
 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -41,6 +41,8 @@ export default function CustomerPrintPortal() {
   // 🌟 NEW STATES: QR Code Popup & Link
   const [showQRModal, setShowQRModal] = useState(false);
   const [upiLink, setUpiLink] = useState('');
+  // 🌟 NEW: Timer States for Payment Modal
+  const [timeLeft, setTimeLeft] = useState(300); // 5 मिनट = 300 सेकंड
 
   // Local Storage States
   const [sessionTokens, setSessionTokens] = useState(() => {
@@ -157,6 +159,59 @@ export default function CustomerPrintPortal() {
     const pagesToCharge = isId ? 1 : calculatedPages;
     setTotalPrice(pagesToCharge * printSettings.copies * rate);
   }, [calculatedPages, printSettings.type, printSettings.copies, docCategory, cafeData]);
+
+  // 🌟 NEW: Auto-Close Modal when user returns from UPI App
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      // अगर मोडल खुला है और यूज़र वापस ब्राउज़र टैब पर आया है
+      if (document.visibilityState === "visible" && showQRModal) {
+        // थोड़ा डिले (800ms) देकर मोडल को ऑटो-क्लोज कर दें, ताकि एकदम से न भागे
+        setTimeout(() => {
+          setShowQRModal(false);
+        }, 800); 
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [showQRModal]);
+  
+  // 🌟 NEW: Payment Gateway Timer & Auto-Close Logic
+  useEffect(() => {
+    let interval;
+    if (showQRModal) {
+      // मोडल खुलते ही टाइमर 5 मिनट (300s) पर सेट करें
+      setTimeLeft(300); 
+      
+      interval = setInterval(() => {
+        setTimeLeft((prev) => {
+          if (prev <= 1) {
+            clearInterval(interval);
+            setShowQRModal(false); // टाइम खत्म होने पर अपने-आप मोडल बंद
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else {
+      setTimeLeft(300); // मोडल बंद होने पर रीसेट कर दें
+    }
+
+    return () => clearInterval(interval);
+  }, [showQRModal]);
+
+  // टाइम को MM:SS फॉर्मेट में दिखाने के लिए (जैसे 04:59)
+  const formatTime = (seconds) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
+  // शुरू के 10 सेकंड तक बटन डिसेबल रहेगा
+  const isButtonDisabled = timeLeft > 290; 
+  const secondsToWait = timeLeft - 290; // उल्टी गिनती (10, 9, 8...)
 
   // Check Live Status
   const checkLiveStatus = async (tokenNum) => {
@@ -754,55 +809,97 @@ export default function CustomerPrintPortal() {
         
       </main>
 
-      {/* 🌟 SMART FALLBACK: QR Code Modal */}
-      {showQRModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-in fade-in zoom-in duration-200">
-          <div className="bg-white p-8 rounded-3xl shadow-2xl text-center max-w-sm w-full relative border-t-8 border-indigo-500">
-            
-            {/* Close Button */}
-            <button 
-              onClick={() => setShowQRModal(false)} 
-              className="absolute top-4 right-4 p-2 bg-slate-100 hover:bg-red-100 hover:text-red-600 rounded-full transition"
-            >
-              <X className="w-5 h-5" />
-            </button>
+      {/* 🌟 PREMIUM PAYMENT MODAL (With Timer & Auto-Close) */}
+{showQRModal && (
+  <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in zoom-in-95 duration-200">
+    <div className="bg-white rounded-[1.5rem] shadow-2xl max-w-sm w-full overflow-hidden flex flex-col border border-slate-100">
 
-            <h3 className="text-xl font-black text-slate-900 mb-1">Pay & Print</h3>
-            <p className="text-sm text-slate-500 mb-6 font-medium">Scan with any UPI App</p>
+      {/* --- HEADER --- */}
+      <div className="bg-slate-50 p-6 text-center relative border-b border-slate-100">
+        <button 
+          onClick={() => setShowQRModal(false)} 
+          className="absolute top-4 right-4 p-2 bg-white text-slate-400 hover:bg-red-50 hover:text-red-500 rounded-full transition-colors shadow-sm border border-slate-200"
+        >
+          <X className="w-4 h-4 font-bold" />
+        </button>
 
-            {/* QR Code */}
-            <div className="flex justify-center mb-6 bg-white p-4 rounded-2xl shadow-inner border-2 border-dashed border-slate-200">
-              <QRCode 
-                value={upiLink} 
-                size={200} 
-                level="H" 
-                fgColor="#0f172a" 
-              />
-            </div>
+        {/* 🌟 Payment Timer */}
+        <div className="absolute top-4 left-4 bg-red-50 text-red-600 px-2.5 py-1 rounded-md text-[10px] font-bold tracking-widest border border-red-100 flex items-center gap-1.5 animate-pulse">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+          </span>
+          {formatTime(timeLeft)}
+        </div>
 
-            <div className="bg-indigo-50 text-indigo-800 p-3 rounded-xl mb-6 font-bold text-lg border border-indigo-100 flex justify-center items-center gap-2">
-              <span>Amount:</span> 
-              <span className="text-2xl font-black">₹{totalPrice}</span>
-            </div>
+        <p className="text-xs font-bold text-slate-400 mb-1 uppercase tracking-widest mt-2">Total Payable</p>
+        <h2 className="text-4xl font-black text-slate-900 tracking-tight">₹{totalPrice}</h2>
+      </div>
 
-            <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2">
-              Supported Apps
-            </p>
-            <div className="flex justify-center gap-3">
-              <span className="text-xs font-bold bg-slate-100 px-3 py-1.5 rounded-lg text-slate-600">PhonePe</span>
-              <span className="text-xs font-bold bg-slate-100 px-3 py-1.5 rounded-lg text-slate-600">GPay</span>
-              <span className="text-xs font-bold bg-slate-100 px-3 py-1.5 rounded-lg text-slate-600">Paytm</span>
-            </div>
+      {/* --- BODY --- */}
+      <div className="p-6 flex flex-col items-center">
+        
+        {/* Helper Text */}
+        <div className="flex flex-col items-center text-center mb-5">
+           <div className="flex items-center gap-2 mb-1">
+               <span className="text-sm font-bold text-slate-600">Scan to pay with</span>
+               <img src="/UPI-Logo-vector.svg" alt="UPI" className="h-4 object-contain" />
+           </div>
+           <p className="text-[11px] text-slate-500 font-medium md:hidden">
+             Redirecting to UPI App...
+           </p>
+        </div>
 
-            <button 
-              onClick={() => window.location.href = upiLink}
-              className="mt-6 w-full text-indigo-600 font-bold hover:underline md:hidden"
-            >
-              Click here to open UPI App again
-            </button>
+        {/* Premium QR Wrapper */}
+        <div className="relative p-3 bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.08)] border border-slate-100 mb-2">
+          <div className="absolute top-0 left-0 w-5 h-5 border-t-4 border-l-4 border-indigo-500 rounded-tl-xl"></div>
+          <div className="absolute top-0 right-0 w-5 h-5 border-t-4 border-r-4 border-indigo-500 rounded-tr-xl"></div>
+          <div className="absolute bottom-0 left-0 w-5 h-5 border-b-4 border-l-4 border-indigo-500 rounded-bl-xl"></div>
+          <div className="absolute bottom-0 right-0 w-5 h-5 border-b-4 border-r-4 border-indigo-500 rounded-br-xl"></div>
+          
+          <QRCode value={upiLink} size={160} level="H" fgColor="#0f172a" />
+        </div>
+
+        {/* --- FOOTER --- */}
+        <div className="w-full mt-4 pt-5 border-t border-slate-100">
+          <div className="flex items-center justify-center gap-6 opacity-70 mb-5">
+              <img src="/Google_Pay_Logo.svg" alt="GPay" className="h-4 object-contain  transition-all cursor-pointer" />
+              <img src="/PhonePe_Logo.svg" alt="PhonePe" className="h-5 object-contain  transition-all cursor-pointer" />
+              <img src="/Paytm.svg" alt="Paytm" className="h-4 object-contain  transition-all cursor-pointer" />
+          </div>
+
+          {/* 🌟 Dynamic "I Have Paid" Button */}
+          <button 
+            onClick={() => setShowQRModal(false)}
+            disabled={isButtonDisabled}
+            className={`w-full font-bold py-3.5 rounded-xl transition-all flex justify-center items-center gap-2 border ${
+              isButtonDisabled 
+                ? "bg-slate-50 text-slate-400 border-slate-200 cursor-not-allowed" 
+                : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200 active:scale-95 shadow-sm"
+            }`}
+          >
+            {isButtonDisabled ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
+                Please verify payment ({secondsToWait}s)
+              </>
+            ) : (
+              <>
+                <CheckCircle className="w-5 h-5" />
+                I have paid, close this
+              </>
+            )}
+          </button>
+          <div className="flex justify-center items-center gap-1.5 text-slate-400 mt-3">
+             <Lock className="w-3 h-3" />
+             <span className="text-[10px] font-semibold tracking-wide uppercase">100% Secure Payment</span>
           </div>
         </div>
-      )}
+
+      </div>
+    </div>
+  </div>
+)}
 
       <p className='mt-4 text-slate-400 items-center text-xs font-semibold'>Powered by Cafe Print</p>
       <Link href="/" className="flex items-center gap-3 group ">
