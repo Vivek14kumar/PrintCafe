@@ -7,6 +7,12 @@ import { getServerSession } from "next-auth/next";
 export async function GET(request) {
   try {
     await connectToDatabase();
+
+    // URL से Pagination parameters निकालें (default page=1, limit=5)
+    const url = new URL(request.url);
+    const page = parseInt(url.searchParams.get("page") || "1");
+    const limit = parseInt(url.searchParams.get("limit") || "5");
+    const skip = (page - 1) * limit;
     
     // 1. चेक करें कि कौन लॉगिन है
     const session = await getServerSession();
@@ -20,14 +26,19 @@ export async function GET(request) {
       return NextResponse.json({ success: false, message: 'Cafe not found' }, { status: 404 });
     }
 
-    // 3. इस कैफे की Ledger एंट्रीज़ निकालें (सबसे नई सबसे ऊपर)
+    // 3. कुल ट्रांज़ैक्शन की गिनती करें (Total Pages कैलकुलेट करने के लिए)
+    const totalTransactions = await Ledger.countDocuments({ cafeId: cafe._id });
+    const totalPages = Math.ceil(totalTransactions / limit);
+
+    // 4. इस कैफे की Ledger एंट्रीज़ निकालें (Pagination के साथ)
     const ledgerEntries = await Ledger.find({ cafeId: cafe._id })
       .sort({ createdAt: -1 })
-      .limit(50); // पिछले 50 ट्रांज़ैक्शन दिखा रहे हैं
+      .skip(skip)
+      .limit(limit);
 
-    // 4. डेटा को Frontend के हिसाब से फॉर्मेट करें
+    // 5. डेटा को Frontend के हिसाब से फॉर्मेट करें
     const formattedTransactions = ledgerEntries.map(entry => ({
-      id: entry._id.toString().slice(-6).toUpperCase(), // ID के आखिरी 6 अक्षर (जैसे: A4B9X1)
+      id: entry._id.toString().slice(-6).toUpperCase(), // ID के आखिरी 6 अक्षर
       type: entry.transactionType,
       amount: entry.amount,
       desc: entry.description,
@@ -41,7 +52,9 @@ export async function GET(request) {
       success: true, 
       walletBalance: cafe.walletBalance || 0,
       walletType: cafe.walletType || 'credit',
-      transactions: formattedTransactions 
+      transactions: formattedTransactions,
+      currentPage: page,       // Frontend pagination UI के लिए
+      totalPages: totalPages   // Frontend pagination UI के लिए
     });
 
   } catch (error) {

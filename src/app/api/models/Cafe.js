@@ -53,7 +53,13 @@ const cafeSchema = new mongoose.Schema({
   },
   walletType: { type: String, default: 'credit' }, // 'credit' या 'unlimited'
   totalEarnings: { type: Number, default: 0 },     // 👈 यह लाइन आपकी कमाई सेव करेगी
-
+ 
+  // 👇 YEH NAYA FIELD ADD KAREIN 👇
+  unlimitedExpiry: { 
+    type: Date, 
+    default: null // Default null rahega jab tak koi ₹499 ka recharge na kare
+  },
+  
   // 5. System Status (सिस्टम फ्लैग्स)
   isProfileComplete: { 
     type: Boolean, 

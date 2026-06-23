@@ -59,41 +59,23 @@ export async function POST(request) {
     const job = await PrintJob.findById(jobId);
     if (!job) return NextResponse.json({ success: false, message: 'Job not found' }, { status: 404 });
 
+    // 👈 कैफे (CSC) ऑपरेटर का डेटा डेटाबेस से निकालें
     const cafe = await Cafe.findById(job.cafeId);
     if (!cafe) return NextResponse.json({ success: false, message: 'Cafe not found' }, { status: 404 });
 
     if (action === 'approve') {
       
       // 1. --- WALLET DEDUCTION LOGIC ---
-      let shouldDeductCredit = true; // Default manenge ki paise katne hain
-
-      if (cafe.walletType === 'unlimited') {
-        const currentDate = new Date();
+      if (cafe.walletType !== 'unlimited') {
+        const creditsToDeduct = 1; // अभी 1 प्रिंट रिक्वेस्ट = 1 क्रेडिट कट रहा है
         
-        // Check karein kya expiry date aaj se aage ki hai
-        if (cafe.unlimitedExpiry && currentDate <= cafe.unlimitedExpiry) {
-          shouldDeductCredit = false; // Plan active hai, paise MAT kaato
-        } else {
-          // Plan expire ho chuka hai! Type wapas 'credit' kar do
-          cafe.walletType = 'credit'; 
+        if (cafe.walletBalance < creditsToDeduct) {
+          // अगर बैलेंस कम है, तो एरर भेजें और प्रिंट रोक दें
+          return NextResponse.json({ success: false, message: 'Insufficient Wallet Credits. Please recharge!' }, { status: 400 });
         }
-      }
-
-      // Agar plan unlimited nahi hai, ya expire ho chuka hai
-      if (shouldDeductCredit) {
-        const creditsToDeduct = 1; 
-        
-        // Note: Make sure aapke DB model me name 'walletBalance' hi ho (kuch log 'balance' rakhte hain)
-        if ((cafe.walletBalance || 0) < creditsToDeduct) {
-          return NextResponse.json({ 
-            success: false, 
-            message: 'Insufficient Wallet Credits. Please recharge!' 
-          }, { status: 400 });
-        }
-        
         cafe.walletBalance -= creditsToDeduct;
 
-        // Ledger Entry
+        //Ledger (Passbook) में एंट्री करें
         await Ledger.create({
           cafeId: cafe._id,
           transactionType: 'Debit',
@@ -102,11 +84,15 @@ export async function POST(request) {
           description: `Printed ${job.docCategory} (Token: #${job.tokenNumber})`,
           status: 'Success'
         });
+        
       }
 
-      // 2. --- UPDATE CAFE EARNINGS & SAVE CAFE ---
+      
+
+      // 2. --- UPDATE CAFE EARNINGS ---
+      // कैफे की कुल कमाई में इस प्रिंट जॉब के पैसे जोड़ें
       cafe.totalEarnings = (cafe.totalEarnings || 0) + (job.totalAmount || 0);
-      await cafe.save(); // Dono changes (earnings aur balance/type) ek hi baar mein save ho jayenge
+      await cafe.save();
 
       // 3. --- STATUS UPDATE ---
       job.status = 'Printed';
@@ -124,7 +110,18 @@ export async function POST(request) {
     } 
     
     if (action === 'reject') {
-      // ... (Aapka Reject logic yahan bilkul same rahega)
+      job.status = 'Rejected';
+      await job.save();
+
+      // रिजेक्ट होने पर भी Cloudinary से फाइलें डिलीट करें
+      await deleteFromCloudinary(job.fileUrl);
+      await deleteFromCloudinary(job.frontFileUrl);
+      await deleteFromCloudinary(job.backFileUrl);
+
+      return NextResponse.json({ 
+        success: true, 
+        message: 'Rejected & File Deleted!' 
+      });
     }
 
     return NextResponse.json({ success: false, message: 'Invalid Action' }, { status: 400 });
