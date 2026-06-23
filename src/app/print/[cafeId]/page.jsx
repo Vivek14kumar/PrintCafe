@@ -4,10 +4,11 @@ import { useParams } from 'next/navigation';
 import { 
   UploadCloud, FileText, RefreshCw, CheckCircle, Store, AlertCircle, 
   Loader2, CreditCard, UserSquare, Smartphone, Banknote, Image as ImageIcon, 
-  X, Printer, Receipt, FileStack, ChevronRight, Trash2 
+  X, Printer, Receipt,IndianRupee, FileStack, ChevronRight, Trash2 
 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
+import QRCode from "react-qr-code"; // 🌟 NEW: QR Code Import
 
 export default function CustomerPrintPortal() {
   const params = useParams();
@@ -37,6 +38,10 @@ export default function CustomerPrintPortal() {
   const [customerName, setCustomerName] = useState('');
   const [orderToken, setOrderToken] = useState('');
 
+  // 🌟 NEW STATES: QR Code Popup & Link
+  const [showQRModal, setShowQRModal] = useState(false);
+  const [upiLink, setUpiLink] = useState('');
+
   // Local Storage States
   const [sessionTokens, setSessionTokens] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -54,7 +59,6 @@ export default function CustomerPrintPortal() {
     return [];
   });
 
-  // 👇 नया कोड: Rejected Tokens को ट्रैक करने के लिए
   const [rejectedTokens, setRejectedTokens] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('rejectedTokens');
@@ -63,7 +67,6 @@ export default function CustomerPrintPortal() {
     return [];
   });
 
-  // 🌟 NEW STATE: Tokens that should be hidden from UI after 4 seconds
   const [hiddenTokens, setHiddenTokens] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('hiddenTokens');
@@ -85,15 +88,17 @@ export default function CustomerPrintPortal() {
       localStorage.removeItem('activePrintTokens');
       localStorage.removeItem('printedTokens');
       localStorage.removeItem('hiddenTokens');
+      localStorage.removeItem('rejectedTokens');
       setSessionTokens([]);
       setPrintedTokens([]);
       setHiddenTokens([]);
+      setRejectedTokens([]);
     }
     
     localStorage.setItem('printLastVisit', now.toString());
   }, []);
 
-  // 🌟 NEW EFFECT: Auto-hide printed tokens after 4 seconds
+  // Auto-hide printed tokens after 4 seconds
   useEffect(() => {
     const tokensToHide = printedTokens.filter(t => !hiddenTokens.includes(t));
     if (tokensToHide.length > 0) {
@@ -103,7 +108,7 @@ export default function CustomerPrintPortal() {
           localStorage.setItem('hiddenTokens', JSON.stringify(updated));
           return updated;
         });
-      }, 4000); // Hide after 4 seconds
+      }, 4000); 
 
       return () => clearTimeout(timer);
     }
@@ -161,7 +166,6 @@ export default function CustomerPrintPortal() {
       
       if (data.success) {
         if (data.isPrinted) {
-          // प्रिंट हो गया
           setPrintedTokens(prev => {
               if (prev.includes(tokenNum)) return prev;
               const newPrinted = [...prev, tokenNum];
@@ -169,7 +173,6 @@ export default function CustomerPrintPortal() {
               return newPrinted;
           });
         } else if (data.isRejected) {
-          // ❌ रिजेक्ट हो गया
           setRejectedTokens(prev => {
               if (prev.includes(tokenNum)) return prev;
               const newRejected = [...prev, tokenNum];
@@ -250,14 +253,17 @@ export default function CustomerPrintPortal() {
     setStep(2);
   };
 
-  // Payment & Submit
+  // 🌟 UPDATED: 1-Click Upload & Payment
   const handlePaymentAndSubmit = async (method) => {
+    setIsUploading(true);
+
+    // Prepare UPI URL if selected
+    let generatedUpiUrl = '';
     if (method === 'UPI') {
-        const upiUrl = `upi://pay?pa=${cafeData?.upiId || 'merchant@upi'}&pn=${cafeData?.shopName}&am=${totalPrice}&cu=INR`;
-        window.location.href = upiUrl;
+      generatedUpiUrl = `upi://pay?pa=${cafeData?.upiId || 'merchant@upi'}&pn=${cafeData?.shopName}&am=${totalPrice}&cu=INR`;
+      setUpiLink(generatedUpiUrl);
     }
 
-    setIsUploading(true);
     const formData = new FormData();
     formData.append('cafeId', cafeId);
     formData.append('printType', printSettings.type);
@@ -289,6 +295,17 @@ export default function CustomerPrintPortal() {
         setSessionTokens(prev => [...prev, data.tokenNumber]);
         setIsUploading(false);
         setStep(4); 
+
+        // 🌟 Smart Device Detection & App Launch
+        if (method === 'UPI') {
+          const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+          if (isMobile) {
+            window.location.href = generatedUpiUrl; // Direct App open
+            setShowQRModal(true); // Fallback if app doesn't open
+          } else {
+            setShowQRModal(true); // Desktop -> Show QR
+          }
+        }
       } else {
         alert(data.message || "Failed to upload file to the server.");
         setIsUploading(false);
@@ -346,7 +363,6 @@ export default function CustomerPrintPortal() {
     );
   };
 
-  // Helper variable so we only map over tokens that shouldn't be hidden yet
   const visibleTokens = sessionTokens.filter(token => !hiddenTokens.includes(token));
 
   // --- Main UI ---
@@ -503,15 +519,44 @@ export default function CustomerPrintPortal() {
                 
                 <div className="space-y-4 mb-8">
                     <button onClick={() => handlePaymentAndSubmit('UPI')} disabled={isUploading} className="w-full p-4 border-2 border-emerald-500 bg-emerald-50 text-emerald-900 rounded-2xl flex items-center gap-4 text-left group hover:bg-emerald-100 transition-colors shadow-sm">
-                        <div className="bg-emerald-500 text-white p-3 rounded-xl shadow-sm"><Smartphone className="w-6 h-6" /></div>
-                        <div>
-                            <h4 className="font-bold text-lg leading-tight">Pay via UPI</h4>
-                            <p className="text-xs font-semibold text-emerald-600 mt-1 opacity-80">GPay, PhonePe, Paytm</p>
+                        <div className="bg-white p-2 rounded-2xl border border-gray-200 shadow-sm flex items-center justify-center w-20 h-20">
+                          {/* Bade size ka UPI Logo */}
+                          <img src="/UPI-Logo-vector.svg" alt="UPI" className="w-full h-auto object-contain" />
                         </div>
+                        <div>
+                        <h4 className="font-bold text-lg leading-tight">Pay via UPI</h4>
+
+                        {/* Icons Container */}
+                        <div className="flex items-center gap-3 mt-2.5 opacity-90">
+                            {/* GPay Logo */}
+                            <img 
+                                src="/Google_Pay_Logo.svg" 
+                                alt="Google Pay" 
+                                className="h-3.5 object-contain" 
+                            />
+
+                            {/* PhonePe Logo */}
+                            <img 
+                                src="/PhonePe_Logo.svg" 
+                                alt="PhonePe" 
+                                className="h-5 object-contain" 
+                            />
+
+                            {/* Paytm Logo */}
+                            <img 
+                                src="/Paytm.svg" 
+                                alt="Paytm" 
+                                className="h-3.5 object-contain" 
+                            />
+                        </div>
+                    </div>
                     </button>
 
-                    <button onClick={() => handlePaymentAndSubmit('Cash')} disabled={isUploading} className="w-full p-4 border-2 border-slate-200 bg-white text-slate-800 rounded-2xl flex items-center gap-4 text-left group hover:border-slate-300 hover:bg-slate-50 transition-colors shadow-sm">
-                        <div className="bg-slate-100 text-slate-600 p-3 rounded-xl border border-slate-200"><Receipt className="w-6 h-6" /></div>
+                    <button onClick={() => handlePaymentAndSubmit('Cash')} disabled={isUploading} className="w-full p-4 border-2 border-blue-400 bg-blue-50 text-slate-800 rounded-2xl flex items-center gap-4 text-left group hover:border-blue-300 hover:bg-blue-100 transition-colors shadow-sm">
+                        <div className="bg-orange-100 p-4 rounded-full border border-orange-200 flex items-center justify-center w-20 h-20">
+                          {/* Cash ke liye Rupee Icon */}
+                          <IndianRupee className="w-10 h-10 text-orange-600" />
+                        </div>
                         <div>
                             <h4 className="font-bold text-lg leading-tight">Pay Cash / Later</h4>
                             <p className="text-xs font-semibold text-slate-500 mt-1">Pay at the shop counter</p>
@@ -532,7 +577,6 @@ export default function CustomerPrintPortal() {
         {/* STEP 4: SUCCESS & TOKENS */}
         {step === 4 && (
           <div className="p-6 sm:p-8 animate-in zoom-in duration-500 bg-slate-900 text-white min-h-[500px] flex flex-col relative overflow-hidden">
-            {/* Background design elements */}
             <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/20 rounded-full blur-3xl -mr-20 -mt-20"></div>
             
             <div className="text-center z-10 mb-6 mt-4">
@@ -543,7 +587,6 @@ export default function CustomerPrintPortal() {
                 <p className="text-slate-400 text-sm font-medium">Show your token at the counter</p>
             </div>
             
-            {/* Receipt Ticket UI */}
             <div className="bg-white text-slate-900 p-6 rounded-2xl relative z-10 flex flex-col mt-2 flex-1 shadow-lg">
                 <div className="flex items-center justify-between border-b border-dashed border-slate-300 pb-4 mb-4">
                     <h3 className="font-bold text-slate-800 flex items-center gap-2">
@@ -561,8 +604,6 @@ export default function CustomerPrintPortal() {
                     ) : (
                         visibleTokens.map((token, index) => {
                             const isDone = printedTokens.includes(token);
-                            
-                            // 🌟 FIX: यह लाइन ऐड की गई है ताकि isRejected एरर ना दे
                             const isRejected = rejectedTokens.includes(token); 
                             
                             return (
@@ -588,7 +629,6 @@ export default function CustomerPrintPortal() {
                                         </p>
                                     </div>
                                       
-                                    {/* Only show refresh button if it's NOT done and NOT rejected */}
                                     {!isDone && !isRejected && (
                                         <button 
                                             onClick={() => checkLiveStatus(token)}
@@ -604,7 +644,6 @@ export default function CustomerPrintPortal() {
                     )}
                 </div>
 
-                {/* 🌟 Clear History Button */}
                 {sessionTokens.length > 0 && (
                     <div className="mt-4 pt-4 border-t border-slate-100">
                         <button 
@@ -613,12 +652,12 @@ export default function CustomerPrintPortal() {
                                     localStorage.removeItem('activePrintTokens');
                                     localStorage.removeItem('printedTokens');
                                     localStorage.removeItem('hiddenTokens');
-                                    localStorage.removeItem('rejectedTokens'); // 🌟 FIX: रिजेक्टेड टोकन भी क्लियर करें
+                                    localStorage.removeItem('rejectedTokens'); 
                                     
                                     setSessionTokens([]);
                                     setPrintedTokens([]);
                                     setHiddenTokens([]);
-                                    setRejectedTokens([]); // 🌟 FIX: स्टेट को भी खाली करें
+                                    setRejectedTokens([]); 
                                     
                                     setStep(1); 
                                 }
@@ -640,7 +679,7 @@ export default function CustomerPrintPortal() {
           </div>
         )}
 
-        {/* 🌟 PREMIUM BOTTOM TOKEN TRACKER (Visible on Steps 1, 2, 3) 🌟 */}
+        {/* PREMIUM BOTTOM TOKEN TRACKER */}
         {sessionTokens.length > 0 && step !== 4 && (
           <div className="bg-slate-50 border-t border-slate-200 mt-auto w-full">
             <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -653,11 +692,10 @@ export default function CustomerPrintPortal() {
                 <span className="text-[11px] font-black text-slate-700 uppercase tracking-widest">Live Queue</span>
               </div>
 
-              {/* Showing ALL tokens, no scrolling, using flex-wrap */}
               <div className="flex gap-2 flex-wrap sm:justify-end">
                 {sessionTokens.map(token => {
                   const isDone = printedTokens.includes(token);
-                  const isRejected = rejectedTokens.includes(token); // 👇 यह लाइन जोड़नी थी
+                  const isRejected = rejectedTokens.includes(token);
 
                   return (
                     <button 
@@ -697,9 +735,11 @@ export default function CustomerPrintPortal() {
                             localStorage.removeItem('activePrintTokens');
                             localStorage.removeItem('printedTokens');
                             localStorage.removeItem('hiddenTokens');
+                            localStorage.removeItem('rejectedTokens');
                             setSessionTokens([]);
                             setPrintedTokens([]);
                             setHiddenTokens([]);
+                            setRejectedTokens([]);
                             setStep(1); 
                         }
                     }}
@@ -713,6 +753,57 @@ export default function CustomerPrintPortal() {
         )}
         
       </main>
+
+      {/* 🌟 SMART FALLBACK: QR Code Modal */}
+      {showQRModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-in fade-in zoom-in duration-200">
+          <div className="bg-white p-8 rounded-3xl shadow-2xl text-center max-w-sm w-full relative border-t-8 border-indigo-500">
+            
+            {/* Close Button */}
+            <button 
+              onClick={() => setShowQRModal(false)} 
+              className="absolute top-4 right-4 p-2 bg-slate-100 hover:bg-red-100 hover:text-red-600 rounded-full transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <h3 className="text-xl font-black text-slate-900 mb-1">Pay & Print</h3>
+            <p className="text-sm text-slate-500 mb-6 font-medium">Scan with any UPI App</p>
+
+            {/* QR Code */}
+            <div className="flex justify-center mb-6 bg-white p-4 rounded-2xl shadow-inner border-2 border-dashed border-slate-200">
+              <QRCode 
+                value={upiLink} 
+                size={200} 
+                level="H" 
+                fgColor="#0f172a" 
+              />
+            </div>
+
+            <div className="bg-indigo-50 text-indigo-800 p-3 rounded-xl mb-6 font-bold text-lg border border-indigo-100 flex justify-center items-center gap-2">
+              <span>Amount:</span> 
+              <span className="text-2xl font-black">₹{totalPrice}</span>
+            </div>
+
+            <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2">
+              Supported Apps
+            </p>
+            <div className="flex justify-center gap-3">
+              <span className="text-xs font-bold bg-slate-100 px-3 py-1.5 rounded-lg text-slate-600">PhonePe</span>
+              <span className="text-xs font-bold bg-slate-100 px-3 py-1.5 rounded-lg text-slate-600">GPay</span>
+              <span className="text-xs font-bold bg-slate-100 px-3 py-1.5 rounded-lg text-slate-600">Paytm</span>
+            </div>
+
+            <button 
+              onClick={() => window.location.href = upiLink}
+              className="mt-6 w-full text-indigo-600 font-bold hover:underline md:hidden"
+            >
+              Click here to open UPI App again
+            </button>
+          </div>
+        </div>
+      )}
+
       <p className='mt-4 text-slate-400 items-center text-xs font-semibold'>Powered by Cafe Print</p>
       <Link href="/" className="flex items-center gap-3 group ">
           <div className="p-1 rounded-xl shadow-md shadow-blue-500/20 group-hover:scale-105 transition-transform">
@@ -725,7 +816,7 @@ export default function CustomerPrintPortal() {
             />
           </div>
             <span className="font-extrabold text-xl tracking-tight text-slate-900">
-              Print<span className='text-blue-600'>Cafe</span>
+              Cafe<span className='text-blue-600'>Print</span>
             </span>
           </Link>
     </div>

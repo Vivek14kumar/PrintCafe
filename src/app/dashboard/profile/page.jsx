@@ -168,7 +168,7 @@ export default function ProfilePage() {
                     <label className="block text-sm font-bold text-gray-700 mb-1.5">Cafe / Shop Name</label>
                     <div className="relative group">
                       <Store className="absolute left-3.5 top-3.5 h-5 w-5 text-gray-400 group-focus-within:text-indigo-600 transition-colors" />
-                      <input type="text" name="shopName" value={profile.shopName} onChange={handleChange} placeholder="e.g. Digital Sahayata Kendra" className="pl-11 w-full bg-gray-50 border border-gray-200 rounded-xl p-3 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all font-medium text-gray-800" />
+                      <input type="text" name="shopName" value={profile.shopName} onChange={handleChange} placeholder="Shop Name" className="pl-11 w-full bg-gray-50 border border-gray-200 rounded-xl p-3 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all font-medium text-gray-800" />
                     </div>
                   </div>
 

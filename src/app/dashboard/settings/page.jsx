@@ -358,7 +358,7 @@ export default function SettingsPage() {
             <button 
               onClick={generateA4Poster}
               disabled={isDownloading}
-              className="w-full bg-white text-blue-700 hover:bg-gray-50 font-black py-4 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg disabled:opacity-80"
+              className="w-full bg-white text-blue-700 text-sm hover:bg-gray-50 font-black py-4 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg disabled:opacity-80"
             >
               {isDownloading ? <RefreshCw className="w-6 h-6 animate-spin" /> : <Download className="w-6 h-6" />}
               {isDownloading ? "Generating HD Poster..." : "Download A4 Poster"}
@@ -370,7 +370,7 @@ export default function SettingsPage() {
                 <LinkIcon className="w-4 h-4 text-blue-300 flex-shrink-0" />
                 <div className="truncate">
                   <p className="text-[10px] text-yellow-200 font-bold uppercase tracking-wider mb-0.5">Shop Link (Code)</p>
-                  <p className="text-[12px] font-bold text-black truncate">{baseUrl.replace(/^https?:\/\//, '')}/print/{shopCodeForQR}</p>
+                  <p className="text-[10px] font-bold text-black truncate">{baseUrl.replace(/^https?:\/\//, '')}/print/{shopCodeForQR}</p>
                 </div>
               </div>
             </div>

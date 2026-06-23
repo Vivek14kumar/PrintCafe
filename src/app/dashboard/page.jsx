@@ -2,9 +2,10 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
-// 🌟 1. Pusher इम्पोर्ट करें
 import Pusher from 'pusher-js'; 
-import { Wallet, PlusCircle, Clock, CheckCircle, XCircle, Printer, RefreshCw, Eye, Smartphone, Banknote, ShieldAlert, X, TrendingUp, Infinity, Zap } from 'lucide-react';
+import { Wallet, PlusCircle, Clock, CheckCircle, XCircle, Printer,IndianRupee, RefreshCw, Eye, Smartphone, Banknote, ShieldAlert, X, TrendingUp, Infinity, Zap, AlertTriangle } from 'lucide-react';
+// 🌟 NEW: Toast notification ke liye import
+import toast, { Toaster } from 'react-hot-toast';
 
 export default function DashboardPage() {
   const { data: session, status } = useSession();
@@ -16,17 +17,14 @@ export default function DashboardPage() {
   const [actionLoading, setActionLoading] = useState(null); 
   const [previewJob, setPreviewJob] = useState(null);
   const [earnings, setEarnings] = useState({ today: 0, month: 0, total: 0 });
-  
-  // 🌟 2. Shop Code स्टेट (Pusher चैनल के लिए)
   const [shopCode, setShopCode] = useState(null);
-
-  // Kiosk Mode State
   const [kioskMode, setKioskMode] = useState(false);
-
-  // Print Modal States
   const [printModalJob, setPrintModalJob] = useState(null);
   const [pdfBlobUrl, setPdfBlobUrl] = useState(null);
   const [recentPrints, setRecentPrints] = useState([]); 
+
+  // 🌟 NEW: Payment check modal ke liye state
+  const [paymentCheckJob, setPaymentCheckJob] = useState(null);
 
   useEffect(() => {
     const savedKioskSetting = localStorage.getItem('kioskMode');
@@ -41,7 +39,7 @@ export default function DashboardPage() {
         setWalletBalance(data.walletBalance);
         setWalletType(data.walletType);
         setPrintQueue(data.queue);
-        setShopCode(data.shopCode); // 🌟 API से shopCode सेट करें
+        setShopCode(data.shopCode);
         setEarnings({
           today: data.stats.todayEarnings || 0,
           month: data.stats.monthlyEarnings || 0,
@@ -55,46 +53,27 @@ export default function DashboardPage() {
     }
   };
 
-  // 🌟 3. पुराना Polling (setInterval) हटा दिया गया है
   useEffect(() => {
     if (status === 'authenticated') {
       fetchDashboardData();
-      // Polling Removed: const interval = setInterval(fetchDashboardData, 5000); 
     }
   }, [status]);
 
-  // 🌟 4. PUSHER MAGIC: रियल-टाइम लिसनर (Real-time Listener)
   useEffect(() => {
-    // अगर shopCode नहीं मिला है तो Pusher कनेक्ट न करें
     if (!shopCode) return;
-
-    // Pusher इनिशियलाइज़ करें
     const pusher = new Pusher(process.env.NEXT_PUBLIC_PUSHER_KEY, {
       cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER,
     });
-
-    // अपनी दुकान वाले चैनल से जुड़ें (Subscribe)
     const channel = pusher.subscribe(`shop-${shopCode}`);
-
-    // 'incoming-print' इवेंट का इंतज़ार करें
     channel.bind('incoming-print', (newJob) => {
-      console.log("🔥 New Print Job Arrived:", newJob);
-      
-      // नया जॉब सबसे ऊपर जोड़ दें (बिना पेज रिफ्रेश किए!)
       setPrintQueue((prevQueue) => [newJob, ...prevQueue]);
-      
-      // PRO TIP: अगर आप चाहें तो यहाँ नोटिफिकेशन साउंड प्ले कर सकते हैं
-      // const audio = new Audio('/notification.mp3');
-      // audio.play().catch(e => console.log("Audio play failed"));
+      toast.success(`New print job from ${newJob.customerName || 'Customer'}!`);
     });
-
-    // Cleanup: जब कैफे वाला पेज बंद करे तो कनेक्शन तोड़ दें
     return () => {
       pusher.unsubscribe(`shop-${shopCode}`);
     };
-  }, [shopCode]); // shopCode मिलने के बाद ही यह चलेगा
+  }, [shopCode]); 
   
-  // पैसे काटने का कॉमन फंक्शन
   const triggerDeduction = async (jobId) => {
     try {
       const res = await fetch('/api/jobs/action', {
@@ -106,7 +85,6 @@ export default function DashboardPage() {
       
       if (data.success) {
         setPrintQueue(prevQueue => prevQueue.filter(q => q._id !== jobId));
-        
         const completedJob = { ...printModalJob, printedAt: new Date(), backupUrl: pdfBlobUrl };
         setRecentPrints(prev => [completedJob, ...prev]);
 
@@ -118,14 +96,14 @@ export default function DashboardPage() {
         }, 10 * 60 * 1000);
 
         closePrintFrame();
-        
-        // पैसे कटने के बाद बैलेंस अपडेट करने के लिए एक बार डेटा मंगा लें
         fetchDashboardData(); 
+        toast.success("Print complete & wallet updated!");
       } else {
-        alert(data.message || "Wallet deduction failed! Please recharge.");
+        toast.error(data.message || "Wallet deduction failed! Please recharge.");
       }
     } catch (apiErr) {
       console.error("Auto deduction failed", apiErr);
+      toast.error("Something went wrong!");
     }
   };
 
@@ -137,22 +115,8 @@ export default function DashboardPage() {
           <html>
             <head>
               <style>
-                body { 
-                  margin: 0; 
-                  display: flex; 
-                  flex-direction: row; 
-                  justify-content: center; 
-                  align-items: flex-start; 
-                  gap: 15px; 
-                  background: white; 
-                  padding-top: 40px;
-                }
-                img { 
-                  width: 45%; 
-                  max-height: 50vh; 
-                  object-fit: contain; 
-                  padding: 2px;
-                }
+                body { margin: 0; display: flex; flex-direction: row; justify-content: center; align-items: flex-start; gap: 15px; background: white; padding-top: 40px; }
+                img { width: 45%; max-height: 50vh; object-fit: contain; padding: 2px; }
                 @media print {
                   @page { margin: 10mm; }
                   body { padding-top: 20px; }
@@ -178,7 +142,6 @@ export default function DashboardPage() {
       
       const rawBlob = await fileResponse.blob();
       const secureBlob = new Blob([rawBlob], { type: 'application/pdf' });
-      
       const securedUrl = URL.createObjectURL(secureBlob) + '#toolbar=0&navpanes=0&scrollbar=0';
       
       setPdfBlobUrl(securedUrl);
@@ -213,10 +176,8 @@ export default function DashboardPage() {
         triggerDeduction(printModalJob._id);
         window.removeEventListener('focus', onPrintDialogClose);
       };
-
       iframe.contentWindow.focus();
       iframe.contentWindow.print();
-
       setTimeout(() => {
         window.addEventListener('focus', onPrintDialogClose);
       }, 1000);
@@ -243,11 +204,11 @@ export default function DashboardPage() {
       });
       const result = await res.json();
       if (result.success) {
-        // सीधा State से हटा दें (API कॉल बचाने के लिए)
         setPrintQueue(prevQueue => prevQueue.filter(q => q._id !== job._id));
+        toast.success("Print job rejected.");
       }
     } catch (error) {
-      alert("Something went wrong!");
+      toast.error("Something went wrong!");
     } finally {
       setActionLoading(null);
     }
@@ -259,8 +220,10 @@ export default function DashboardPage() {
 
   return (
     <div className="p-6 md:p-8 bg-gray-50 min-h-screen">
-      
-      {/* Header & Stats */}
+      {/* 🌟 NEW: Toaster Component for Toast notifications */}
+      <Toaster position="top-center" reverseOrder={false} />
+
+      {/* Header & Stats (Unchanged) */}
       <header className="mb-8">
         <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
@@ -360,12 +323,14 @@ export default function DashboardPage() {
                     <div className="flex flex-col items-start gap-1">
                       <span className="text-lg font-black text-gray-900">₹{job.totalAmount}</span>
                       {job.paymentMethod === 'UPI' ? (
-                          <span className="inline-flex items-center gap-1.5 bg-purple-50 text-purple-700 border border-purple-200 px-2.5 py-1 rounded-lg text-xs font-bold">
-                            <Smartphone className="w-3.5 h-3.5" /> Check UPI
+                          <span className="inline-flex items-center gap-1.5 bg-white text-gray-700 border border-gray-200 shadow-sm px-2.5 py-1 rounded-lg text-xs font-bold">
+                            {/* UPI Official Logo from Wikimedia */}
+                            <img src="/UPI-Logo-vector.svg" alt="UPI" className="h-3.5" /> 
+                            Check UPI
                           </span>
                       ) : (
                           <span className="inline-flex items-center gap-1.5 bg-green-50 text-green-700 border border-green-200 px-2.5 py-1 rounded-lg text-xs font-bold">
-                            <Banknote className="w-3.5 h-3.5" /> Collect Cash
+                            <IndianRupee className="w-3.5 h-3.5" /> Collect Cash
                           </span>
                       )}
                     </div>
@@ -373,7 +338,13 @@ export default function DashboardPage() {
                   
                   <td className="p-4 text-right">
                     <div className="flex justify-end gap-2">
-                      <button onClick={() => openPrintFrame(job)} disabled={actionLoading === job._id} className={`${kioskMode ? 'bg-yellow-500 hover:bg-yellow-600' : 'bg-blue-600 hover:bg-blue-700'} text-white p-2.5 rounded-xl transition disabled:opacity-50 flex items-center gap-1 shadow-sm`} title="Print Document">
+                      {/* 🌟 NEW: onClick event changed to trigger our new paymentCheckJob state instead of directly opening the print modal */}
+                      <button 
+                        onClick={() => setPaymentCheckJob(job)} 
+                        disabled={actionLoading === job._id} 
+                        className={`${kioskMode ? 'bg-yellow-500 hover:bg-yellow-600' : 'bg-blue-600 hover:bg-blue-700'} text-white p-2.5 rounded-xl transition disabled:opacity-50 flex items-center gap-1 shadow-sm`} 
+                        title="Print Document"
+                      >
                         {actionLoading === job._id ? <RefreshCw className="w-4 h-4 animate-spin" /> : (kioskMode ? <Zap className="w-4 h-4" /> : <Printer className="w-4 h-4" />)}
                         <span className="text-xs font-bold hidden sm:inline">{kioskMode ? 'Fast Print' : 'Print'}</span>
                       </button>
@@ -403,10 +374,8 @@ export default function DashboardPage() {
           </table>
         </div>
       </section>
-      
-      {/* ========================================== */}
-      {/* 🚀 RECENT PRINTS (10 MINUTE BACKUP BUFFER) */}
-      {/* ========================================== */}
+
+      {/* RECENT PRINTS (Unchanged) */}
       {recentPrints.length > 0 && (
         <section className="mt-8 bg-white rounded-2xl shadow-sm border border-orange-200 overflow-hidden relative">
           <div className="absolute top-0 right-0 w-64 h-64 bg-orange-50 rounded-full blur-3xl -z-10 opacity-50 translate-x-1/2 -translate-y-1/2"></div>
@@ -466,7 +435,78 @@ export default function DashboardPage() {
       )}
 
       {/* ========================================== */}
-      {/* 🚀 THE NEW VISIBLE PRINT FRAME MODAL (BLANK PAGE FIX) */}
+      {/* 🚀 NEW: PAYMENT VERIFICATION MODAL */}
+      {/* ========================================== */}
+      {paymentCheckJob && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm animate-in fade-in zoom-in-95 duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-gray-100">
+            
+            {/* Header Area Based on Payment Method */}
+            <div className={`p-8 text-center ${paymentCheckJob.paymentMethod === 'UPI' ? 'bg-purple-50' : 'bg-green-50'}`}>
+              <div className="flex justify-center mb-4">
+                {paymentCheckJob.paymentMethod === 'UPI' ? (
+                  <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex items-center justify-center w-20 h-20">
+                    {/* Bade size ka UPI Logo */}
+                    <img src="/UPI-Logo-vector.svg" alt="UPI" className="w-full h-auto object-contain" />
+                  </div>
+                ) : (
+                  <div className="bg-green-100 p-4 rounded-full border border-green-200 flex items-center justify-center w-20 h-20">
+                    {/* Cash ke liye Rupee Icon */}
+                    <IndianRupee className="w-10 h-10 text-green-600" />
+                  </div>
+                )}
+              </div>
+              
+              <h3 className="text-2xl font-black text-gray-900 mb-2">
+                Verify Payment of ₹{paymentCheckJob.totalAmount}
+              </h3>
+              
+              <div className="flex items-center justify-center gap-2 text-sm font-bold mb-4">
+                <span className="text-gray-500">Method:</span>
+                <span className={`px-2 py-0.5 rounded ${paymentCheckJob.paymentMethod === 'UPI' ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'}`}>
+                  {paymentCheckJob.paymentMethod}
+                </span>
+              </div>
+
+              <p className="text-sm font-medium text-gray-600 bg-white/60 p-3 rounded-xl inline-flex items-start text-left gap-2 shadow-sm border border-white">
+                <AlertTriangle className="w-5 h-5 flex-shrink-0 text-amber-500" />
+                {paymentCheckJob.paymentMethod === 'UPI' 
+                  ? "Please check your phone or soundbox to confirm you have received the UPI payment before hitting print." 
+                  : "Please make sure to collect the physical cash amount from the customer."}
+              </p>
+            </div>
+            
+            {/* Action Buttons Area */}
+            <div className="p-4 bg-white flex gap-3">
+              <button 
+                onClick={() => setPaymentCheckJob(null)} 
+                className="flex-1 py-3.5 rounded-xl font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 transition"
+              >
+                Not Received / Cancel
+              </button>
+              
+              <button 
+                onClick={() => {
+                  toast.success("Payment verified! Opening print preview...", { icon: '✅' });
+                  openPrintFrame(paymentCheckJob);
+                  setPaymentCheckJob(null);
+                }} 
+                className={`flex-1 py-3.5 rounded-xl font-black text-white transition flex justify-center items-center gap-2 shadow-lg ${
+                  paymentCheckJob.paymentMethod === 'UPI' 
+                    ? 'bg-purple-600 hover:bg-purple-700 shadow-purple-600/30' 
+                    : 'bg-green-600 hover:bg-green-700 shadow-green-600/30'
+                }`}
+              >
+                <CheckCircle className="w-5 h-5" /> 
+                Payment Done, Print
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================== */}
+      {/* 🚀 THE VISIBLE PRINT FRAME MODAL (Unchanged) */}
       {/* ========================================== */}
       {printModalJob && pdfBlobUrl && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-gray-900/90 backdrop-blur-sm animate-in fade-in duration-200">
@@ -488,7 +528,6 @@ export default function DashboardPage() {
               </button>
             </div>
 
-            {/* 🌟 VISIBLE IFRAME WITH ANTI-CHEAT SHIELD */}
             <div 
               className="flex-1 bg-gray-200 relative overflow-hidden"
               onContextMenu={(e) => e.preventDefault()} 
