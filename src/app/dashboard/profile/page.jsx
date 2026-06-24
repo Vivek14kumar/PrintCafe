@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import { User, Mail, Phone, Store, Save, RefreshCw, Briefcase, ShieldCheck } from 'lucide-react';
+import { User, Mail, Phone, Store, Save, RefreshCw, Briefcase, ShieldCheck, Map, MapPin } from 'lucide-react';
 
 export default function ProfilePage() {
   const { status } = useSession();
@@ -13,7 +13,10 @@ export default function ProfilePage() {
     email: '',
     phone: '',
     shopName: '',
-    businessType: 'Cyber Cafe'
+    businessType: 'Cyber Cafe',
+    state: '',
+    district: '',
+    pincode: ''
   });
 
   useEffect(() => {
@@ -28,7 +31,10 @@ export default function ProfilePage() {
             email: data.profile.email || '',
             phone: data.profile.phone || '',
             shopName: data.profile.shopName || '',
-            businessType: data.profile.businessType || 'Cyber Cafe'
+            businessType: data.profile.businessType || 'Cyber Cafe',
+            state: data.profile.state || '',
+            district: data.profile.district || '',
+            pincode: data.profile.pincode || ''
           });
         }
       } catch (error) {
@@ -44,7 +50,14 @@ export default function ProfilePage() {
   }, [status]);
 
   const handleChange = (e) => {
-    setProfile({ ...profile, [e.target.name]: e.target.value });
+    let { name, value } = e.target;
+
+    // Auto-format numeric fields
+    if (name === 'phone' || name === 'pincode') {
+      value = value.replace(/\D/g, '');
+    }
+
+    setProfile({ ...profile, [name]: value });
   };
 
   const handleSave = async (e) => {
@@ -61,7 +74,7 @@ export default function ProfilePage() {
       if(data.success) {
         alert("Profile Updated Successfully!");
       } else {
-        alert(data.message);
+        alert(data.message || "Failed to update profile.");
       }
     } catch(error) {
       alert("Something went wrong!");
@@ -156,11 +169,11 @@ export default function ProfilePage() {
                 </div>
               </div>
 
-              {/* --- Business Details Column --- */}
+              {/* --- Business & Location Details Column --- */}
               <div className="space-y-6">
                 <div className="flex items-center gap-2 border-b border-gray-100 pb-3">
                   <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg"><Briefcase className="w-5 h-5" /></div>
-                  <h3 className="font-bold text-gray-900 text-lg">Business Identity</h3>
+                  <h3 className="font-bold text-gray-900 text-lg">Business & Location</h3>
                 </div>
                 
                 <div className="space-y-5">
@@ -176,15 +189,42 @@ export default function ProfilePage() {
                     <label className="block text-sm font-bold text-gray-700 mb-1.5">Business Category</label>
                     <div className="relative group">
                       <Briefcase className="absolute left-3.5 top-3.5 h-5 w-5 text-gray-400 group-focus-within:text-indigo-600 transition-colors" />
-                      <select name="businessType" value={profile.businessType} onChange={handleChange} className="pl-11 w-full bg-gray-50 border border-gray-200 rounded-xl p-3 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all font-medium text-gray-800 appearance-none">
+                      <select name="businessType" value={profile.businessType} onChange={handleChange} className="pl-11 w-full bg-gray-50 border border-gray-200 rounded-xl p-3 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all font-medium text-gray-800 appearance-none cursor-pointer">
                         <option>Cyber Cafe</option>
-                        <option>CSC (Common Service Centre)</option>
+                        <option>CSC Operator</option>
                         <option>Vasudha Kendra</option>
-                        <option>Stationery & Print Shop</option>
-                        <option>Internet Cafe</option>
+                        <option>Print Shop</option>
                       </select>
                     </div>
                   </div>
+
+                  {/* New Location Fields */}
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1.5">State</label>
+                    <div className="relative group">
+                      <Map className="absolute left-3.5 top-3.5 h-5 w-5 text-gray-400 group-focus-within:text-indigo-600 transition-colors" />
+                      <input type="text" name="state" value={profile.state} onChange={handleChange} placeholder="Enter State" className="pl-11 w-full bg-gray-50 border border-gray-200 rounded-xl p-3 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all font-medium text-gray-800" />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-1.5">District</label>
+                      <div className="relative group">
+                        <MapPin className="absolute left-3.5 top-3.5 h-5 w-5 text-gray-400 group-focus-within:text-indigo-600 transition-colors" />
+                        <input type="text" name="district" value={profile.district} onChange={handleChange} placeholder="District" className="pl-11 w-full bg-gray-50 border border-gray-200 rounded-xl p-3 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all font-medium text-gray-800" />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-1.5">Pincode</label>
+                      <div className="relative group">
+                        <MapPin className="absolute left-3.5 top-3.5 h-5 w-5 text-gray-400 group-focus-within:text-indigo-600 transition-colors" />
+                        <input type="text" name="pincode" value={profile.pincode} onChange={handleChange} maxLength="6" placeholder="6-digit PIN" className="pl-11 w-full bg-gray-50 border border-gray-200 rounded-xl p-3 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all font-medium text-gray-800" />
+                      </div>
+                    </div>
+                  </div>
+
                 </div>
               </div>
               

@@ -13,9 +13,11 @@ export async function PUT(request) {
     }
 
     const body = await request.json();
-    const { ownerName, phone, shopName, businessType, cscId } = body;
+    
+    // 1. Updated extraction: removed cscId, added new location fields
+    const { ownerName, phone, shopName, businessType, state, district, pincode } = body;
 
-    // डेटाबेस में यूज़र को खोजें और अपडेट करें
+    // 2. डेटाबेस में यूज़र को खोजें और अपडेट करें
     const updatedCafe = await Cafe.findOneAndUpdate(
       { email: session.user.email },
       { 
@@ -24,12 +26,14 @@ export async function PUT(request) {
           phone: phone,
           shopName: shopName,
           businessType: businessType || 'Cyber Cafe',
-          cscId: cscId,
+          state: state,          // 👈 नया फील्ड
+          district: district,    // 👈 नया फील्ड
+          pincode: pincode,      // 👈 नया फील्ड
           isProfileComplete: true // इसे true करना ज़रूरी है ताकि मॉडल बार-बार न दिखे
         }
       },
-      { new: true } // अपडेटेड डॉक्यूमेंट वापस पाने के लिए
-    );
+      { new: true, runValidators: true } // update के बाद नया डेटा वापस करेगा और schema rules चेक करेगा
+    ).select('-password');
 
     if (!updatedCafe) {
       return NextResponse.json({ success: false, message: 'User not found' }, { status: 404 });
@@ -43,6 +47,16 @@ export async function PUT(request) {
 
   } catch (error) {
     console.error("Profile Update Error:", error);
+
+    // 3. Handle Duplicate Phone Number Error gracefully
+    // अगर कोई ऐसा नंबर डालता है जो पहले से किसी और कैफे का है, तो ये एरर देगा
+    if (error.code === 11000 && error.keyPattern && error.keyPattern.phone) {
+       return NextResponse.json({ 
+         success: false, 
+         message: 'This phone number is already registered to another account.' 
+       }, { status: 400 });
+    }
+
     return NextResponse.json({ success: false, message: 'Internal Server Error' }, { status: 500 });
   }
 }

@@ -7,7 +7,7 @@ import bcrypt from 'bcryptjs';
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { ownerName, phone, shopName, businessType, cscId, password, email } = body;
+    const { ownerName, phone, shopName, businessType, state, district, pincode, password, email } = body;
 
     // 1. डेटाबेस कनेक्ट करें
     await connectToDatabase();
@@ -43,7 +43,9 @@ export async function POST(request) {
       email, 
       shopName,
       businessType,
-      cscId,
+      state,       // 👈 नया फील्ड 
+      district,    // 👈 नया फील्ड
+      pincode,     // 👈 नया फील्ड
       password: hashedPassword,
       walletBalance: 50, // 🌟 नया अकाउंट 50 बैलेंस से शुरू होगा
       walletType: "credit",

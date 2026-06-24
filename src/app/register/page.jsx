@@ -4,9 +4,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { signIn } from 'next-auth/react'; 
 import { 
-  Store, User, Phone, Lock, FileBadge, AlertTriangle, 
+  Store, User, Phone, Lock, AlertTriangle, 
   Mail, CheckCircle2, Zap, TrendingUp, ShieldCheck, IndianRupee,
-  Eye, EyeOff
+  Eye, EyeOff, MapPin, Map
 } from 'lucide-react';
 
 export default function CafeRegistrationPage() {
@@ -17,7 +17,8 @@ export default function CafeRegistrationPage() {
 
   const [formData, setFormData] = useState({
     ownerName: '', email: '', phone: '', shopName: '',
-    businessType: 'Cyber Cafe', cscId: '', password: '', confirmPassword: ''
+    businessType: 'Cyber Cafe', state: '', district: '', pincode: '',
+    password: '', confirmPassword: ''
   });
 
   const [fieldErrors, setFieldErrors] = useState({});
@@ -34,10 +35,12 @@ export default function CafeRegistrationPage() {
   const validateField = (name, value) => {
     let errorMsg = '';
     
-    if (!value && name !== 'cscId') {
+    if (!value) {
       errorMsg = 'This field cannot be blank.';
     } else if (name === 'phone' && !/^[6-9]\d{9}$/.test(value)) {
       errorMsg = 'Must be 10 digits.';
+    } else if (name === 'pincode' && !/^\d{6}$/.test(value)) {
+      errorMsg = 'Must be 6 digits.';
     } else if (name === 'password') {
       // Regex for at least 1 uppercase, 1 lowercase, 1 number, 1 special char, 6-8 length
       const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{6,8}$/;
@@ -53,24 +56,26 @@ export default function CafeRegistrationPage() {
   };
 
   const handleChange = (e) => {
-  let { name, value } = e.target;
+    let { name, value } = e.target;
 
-  // Agar phone field hai, toh real-time formatting apply karein
-  if (name === 'phone') {
-    // 1. Pehle saare non-numbers (letters/symbols) hata dein
-    value = value.replace(/\D/g, '');
+    // Apply real-time formatting for numeric fields
+    if (name === 'phone' || name === 'pincode') {
+      // 1. Remove all non-numeric characters
+      value = value.replace(/\D/g, '');
+      
+      // 2. If phone, remove starting 0-5
+      if (name === 'phone') {
+        value = value.replace(/^[0-5]+/, '');
+      }
+    }
+
+    setFormData({ ...formData, [name]: value });
     
-    // 2. Fir starting mein agar 0-5 hai, toh usko hata dein
-    value = value.replace(/^[0-5]+/, '');
-  }
-
-  setFormData({ ...formData, [name]: value });
-  
-  // Clear error as user types
-  if (fieldErrors[name]) {
-    setFieldErrors(prev => ({ ...prev, [name]: '' }));
-  }
-};
+    // Clear error as user types
+    if (fieldErrors[name]) {
+      setFieldErrors(prev => ({ ...prev, [name]: '' }));
+    }
+  };
 
   const handleBlur = (e) => {
     validateField(e.target.name, e.target.value);
@@ -284,23 +289,52 @@ export default function CafeRegistrationPage() {
               </div>
             </div>
 
-            {/* Row 3 */}
+            {/* Row 3 - Business Type & State */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <select name="businessType" value={formData.businessType} onChange={handleChange} className="w-full px-3 py-2.5 bg-slate-50/50 border border-slate-200 rounded-xl text-sm font-medium focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all cursor-pointer text-slate-700">
                 <option>Cyber Cafe</option>
-                <option>CSC Operator</option>
+                <option>CSC Center</option>
                 <option>Vasudha Kendra</option>
                 <option>Print Shop</option>
               </select>
-              <div className="relative group">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                  <FileBadge className="h-4 w-4 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
+
+              <div>
+                <div className="relative group">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                    <Map className="h-4 w-4 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
+                  </div>
+                  <input type="text" name="state" value={formData.state} onChange={handleChange} onBlur={handleBlur} className={`w-full pl-10 pr-3 py-2.5 bg-slate-50/50 border rounded-xl text-sm font-medium focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder:text-slate-400 ${fieldErrors.state ? 'border-red-500' : 'border-slate-200 focus:border-transparent'}`} placeholder="State" />
                 </div>
-                <input type="text" name="cscId" value={formData.cscId} onChange={handleChange} className="w-full pl-10 pr-3 py-2.5 bg-slate-50/50 border border-slate-200 rounded-xl text-sm font-medium focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all placeholder:text-slate-400" placeholder="CSC/Reg ID (Optional)" />
+                {fieldErrors.state && <p className="text-red-500 text-xs mt-1 ml-1 font-semibold">{fieldErrors.state}</p>}
               </div>
             </div>
 
-            {/* Row 4 - Passwords */}
+            {/* Row 4 -  District & Pincode */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              
+
+              <div>
+                <div className="relative group">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                    <MapPin className="h-4 w-4 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
+                  </div>
+                  <input type="text" name="district" value={formData.district} onChange={handleChange} onBlur={handleBlur} className={`w-full pl-10 pr-3 py-2.5 bg-slate-50/50 border rounded-xl text-sm font-medium focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder:text-slate-400 ${fieldErrors.district ? 'border-red-500' : 'border-slate-200 focus:border-transparent'}`} placeholder="District" />
+                </div>
+                {fieldErrors.district && <p className="text-red-500 text-xs mt-1 ml-1 font-semibold">{fieldErrors.district}</p>}
+              </div>
+
+              <div>
+                <div className="relative group">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                    <MapPin className="h-4 w-4 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
+                  </div>
+                  <input type="text" name="pincode" maxLength="6" value={formData.pincode} onChange={handleChange} onBlur={handleBlur} className={`w-full pl-10 pr-3 py-2.5 bg-slate-50/50 border rounded-xl text-sm font-medium focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder:text-slate-400 ${fieldErrors.pincode ? 'border-red-500' : 'border-slate-200 focus:border-transparent'}`} placeholder="Pincode" />
+                </div>
+                {fieldErrors.pincode && <p className="text-red-500 text-xs mt-1 ml-1 font-semibold">{fieldErrors.pincode}</p>}
+              </div>
+            </div>
+
+            {/* Row 5 - Passwords */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <div className="relative group">

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
-import { Printer, FileText, Wallet, Settings, LogOut, History, User, Store, ShieldCheck, ChevronRight, Menu, X } from 'lucide-react';
+import { Printer, FileText, Wallet, QrCode, LogOut, History, User, Store, ShieldCheck, ChevronRight, Menu, X } from 'lucide-react';
 
 export default function DashboardLayout({ children }) {
   const pathname = usePathname();
@@ -161,8 +161,8 @@ export default function DashboardLayout({ children }) {
 
             <Link href="/dashboard/settings" className={getLinkClass('/dashboard/settings')} onClick={() => setIsMobileMenuOpen(false)}>
               <div className="flex items-center gap-3">
-                <IconWrapper isActive={pathname === '/dashboard/settings'}><Settings className="w-4 h-4" /></IconWrapper>
-                Settings
+                <IconWrapper isActive={pathname === '/dashboard/settings'}><QrCode className="w-4 h-4" /></IconWrapper>
+                QR Code Settings
               </div>
               {pathname === '/dashboard/settings' && <ChevronRight className="w-4 h-4 opacity-70" />}
             </Link>

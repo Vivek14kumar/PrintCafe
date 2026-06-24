@@ -36,10 +36,19 @@ const cafeSchema = new mongoose.Schema({
   },
   businessType: { 
     type: String, 
-    enum: ['Cyber Cafe', 'CSC (Common Service Centre)', 'Vasudha Kendra', 'Stationery & Print Shop'] 
+    // Updated to match the frontend dropdown exactly
+    enum: ['Cyber Cafe', 'CSC Center', 'Vasudha Kendra', 'Print Shop'] 
   },
-  cscId: { 
-    type: String // Optional
+  
+  // 👇 NAYE FIELDS KELIYE (State, District, Pincode) 👇
+  state: {
+    type: String
+  },
+  district: {
+    type: String
+  },
+  pincode: {
+    type: String
   },
 
   // 4. Payment & Wallet (वॉलेट और यूपीआई)
@@ -53,7 +62,7 @@ const cafeSchema = new mongoose.Schema({
   },
   walletType: { type: String, default: 'credit' }, // 'credit' या 'unlimited'
   totalEarnings: { type: Number, default: 0 },     // 👈 यह लाइन आपकी कमाई सेव करेगी
- 
+  
   // 👇 YEH NAYA FIELD ADD KAREIN 👇
   unlimitedExpiry: { 
     type: Date, 
