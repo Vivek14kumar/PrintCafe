@@ -95,7 +95,7 @@ export default function DashboardPage() {
           }
         }, 10 * 60 * 1000);
 
-        closePrintFrame();
+        closePrintFrame(true);
         fetchDashboardData(); 
         toast.success("Print complete & wallet updated!");
       } else {
@@ -172,25 +172,50 @@ export default function DashboardPage() {
     
     const iframe = document.getElementById('visible-print-frame');
     if (iframe) {
+      // Ek variable taaki deduction multiple times call na ho jaye
+      let hasExecuted = false; 
+
       const onPrintDialogClose = () => {
-        triggerDeduction(printModalJob._id);
+        if (hasExecuted) return;
+        hasExecuted = true;
+        
+        triggerDeduction(printModalJob._id); // Ye successfully run hokar modal close kar dega
+        
+        // Listeners ko clean kar do
         window.removeEventListener('focus', onPrintDialogClose);
+        window.removeEventListener('mousemove', onPrintDialogClose);
       };
+
       iframe.contentWindow.focus();
+      
+      // Method 1: Chrome/Edge native afterprint event (Sabse best)
+      iframe.contentWindow.addEventListener('afterprint', onPrintDialogClose);
+      
       iframe.contentWindow.print();
+      
+      // Method 2: Fallback triggers (Agar afterprint miss ho jaye)
+      // Print button dabane ke 1 second baad mouse move ya focus ka wait karega
       setTimeout(() => {
         window.addEventListener('focus', onPrintDialogClose);
+        window.addEventListener('mousemove', onPrintDialogClose);
       }, 1000);
     }
   };
 
-  const closePrintFrame = () => {
-    setPrintModalJob(null);
-    if (pdfBlobUrl && !pdfBlobUrl.includes('docs.google.com')) {
-      URL.revokeObjectURL(pdfBlobUrl); 
-    }
-    setPdfBlobUrl(null);
-  };
+  const closePrintFrame = (isSuccess = false) => {
+  setPrintModalJob(null);
+  
+  // URL se '#' ke baad ka part hata do taaki revokeObjectURL crash na ho
+  const cleanUrl = pdfBlobUrl ? pdfBlobUrl.split('#')[0] : null;
+
+  // Agar print success nahi hua hai (yani Cancel ya X dabaya gaya hai)
+  // Tabhi memory turant clear karo. Success hone par mat karo (kyunki Recent Prints ko 10 min tak chahiye)
+  if (isSuccess !== true && cleanUrl && !cleanUrl.includes('docs.google.com')) {
+    URL.revokeObjectURL(cleanUrl); 
+  }
+  
+  setPdfBlobUrl(null);
+};
 
   const handleReject = async (job) => {
     if (!window.confirm("Are you sure you want to reject and delete this print request?")) return;
@@ -523,7 +548,7 @@ export default function DashboardPage() {
                   <p className="text-xs text-gray-500 font-medium mt-1">Check the document below. Click 'Print Now' to send to printer.</p>
                 )}
               </div>
-              <button onClick={closePrintFrame} className="p-2 bg-gray-200 hover:bg-red-100 hover:text-red-600 rounded-full transition">
+              <button onClick={() => closePrintFrame(false)} className="p-2 bg-gray-200 hover:bg-red-100 hover:text-red-600 rounded-full transition">
                 <X className="w-6 h-6" />
               </button>
             </div>
@@ -561,7 +586,7 @@ export default function DashboardPage() {
               </div>
               
               <div className="flex gap-3">
-                <button onClick={closePrintFrame} className="px-5 py-3 rounded-xl font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 transition">
+                <button onClick={() => closePrintFrame(false)} className="px-5 py-3 rounded-xl font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 transition">
                   Cancel
                 </button>
 

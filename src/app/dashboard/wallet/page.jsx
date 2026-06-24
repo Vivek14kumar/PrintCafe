@@ -1,10 +1,11 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-import { Wallet, ArrowDownRight, ArrowUpRight, PlusCircle, Infinity, X, CheckCircle2, ShieldCheck, ChevronLeft, ChevronRight } from 'lucide-react';
+// 👇 Naye icons import kiye hain (Search)
+import { Wallet, ArrowDownRight, ArrowUpRight, PlusCircle, Infinity, X, CheckCircle2, ShieldCheck, ChevronLeft, ChevronRight, Search } from 'lucide-react';
 import { useSession } from "next-auth/react";
 
 export default function WalletPage() {
-  const { data: session } = useSession(); // 👈 YEH ADD KAREIN
+  const { data: session } = useSession(); 
   const cafeId = session?.user?.id || session?.user?._id;
   const [balance, setBalance] = useState(0);
   const [walletType, setWalletType] = useState('credit');
@@ -15,6 +16,14 @@ export default function WalletPage() {
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+
+  // 👇 Naye Filter, Sort aur Search States 👇
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterType, setFilterType] = useState('All'); // 'All', 'Credit', 'Debit'
+  const [sortBy, setSortBy] = useState('newest'); // 'newest', 'oldest', 'amount_high', 'amount_low'
+  // 👇 NAYE DATE STATES 👇
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   // Recharge Modal State
   const [showRechargeModal, setShowRechargeModal] = useState(false);
@@ -27,11 +36,22 @@ export default function WalletPage() {
     { id: 4, name: "Monthly Pass", price: 499, credits: "Unlimited", tag: "Best for Heavy Use", desc: "30 Days Validity" }
   ];
 
-  // Fetch paginated data
+  // Fetch paginated and filtered data
   const fetchWalletData = async (page = 1) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/wallet?page=${page}&limit=5`);
+      // API call mein filter parameters add kiye hain
+      const queryParams = new URLSearchParams({
+        page,
+        limit: 5,
+        search: searchTerm,
+        type: filterType,
+        sort: sortBy,
+        ...(startDate && { startDate }),
+        ...(endDate && { endDate })
+      });
+
+      const res = await fetch(`/api/wallet?${queryParams}`);
       const data = await res.json();
       if (data.success) {
         setBalance(data.walletBalance);
@@ -39,7 +59,6 @@ export default function WalletPage() {
         setTransactions(data.transactions);
         setTotalPages(data.totalPages);
         setCurrentPage(data.currentPage);
-        setCafeId(data.cafeId);
       }
     } catch (error) {
       console.error("Error fetching wallet data", error);
@@ -48,11 +67,15 @@ export default function WalletPage() {
     }
   };
 
+  // 👇 Debouncing effect: Type karne ke 500ms baad automatically fetch hoga 👇
   useEffect(() => {
-    fetchWalletData(1);
-  }, []);
+    const delayDebounceFn = setTimeout(() => {
+      fetchWalletData(1); // Filter change hone par wapas page 1 par jayenge
+    }, 500);
 
-  // Load Razorpay Script dynamically
+    return () => clearTimeout(delayDebounceFn);
+  }, [searchTerm, filterType, sortBy, startDate, endDate]); // Jab bhi inme se kuch badlega, fetch trigger hoga
+
   const loadRazorpayScript = () => {
     return new Promise((resolve) => {
       const script = document.createElement("script");
@@ -75,7 +98,6 @@ export default function WalletPage() {
     }
 
     try {
-      // 1. Create order on your backend
       const orderRes = await fetch('/api/wallet/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -89,16 +111,21 @@ export default function WalletPage() {
         return;
       }
 
-      // 2. Open Razorpay Checkout
       const options = {
         key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID, 
         amount: orderData.order.amount,
         currency: orderData.order.currency,
         name: "Print Cafe",
         description: `Wallet Recharge: ${selectedPlan.name}`,
-        order_id: orderData.order.id, // Yahan sirf order_id aayega
+        order_id: orderData.order.id, 
+        
+        prefill: {
+          name: session?.user?.name || session?.user?.ownerName || "Cafe Owner", 
+          email: session?.user?.email || "owner@cafe.com",
+          contact: session?.user?.phone || ""
+        },
+
         handler: async function (response) {
-          // 3. Verify Payment
           const verifyRes = await fetch('/api/wallet/verify-payment', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -107,7 +134,7 @@ export default function WalletPage() {
               razorpay_order_id: response.razorpay_order_id,
               razorpay_signature: response.razorpay_signature,
               planDetails: selectedPlan,
-              cafeId: cafeId // Aapka actual user ID
+              cafeId: cafeId 
             })
           });
           
@@ -137,7 +164,6 @@ export default function WalletPage() {
 
   return (
     <div className="p-6 md:p-8 max-w-5xl mx-auto">
-      {/* Header aur Balance Card same rahenge jaisa aapne banaya tha */}
       <header className="mb-8">
         <h2 className="text-3xl font-extrabold text-gray-900">Wallet & Passbook</h2>
         <p className="text-gray-500 font-medium mt-1">Manage your portal credits and view transaction history.</p>
@@ -168,11 +194,81 @@ export default function WalletPage() {
         )}
       </div>
 
-      {/* Ledger Table with Pagination */}
+      {/* Ledger Table with Filters */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="p-5 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
-          <h3 className="font-extrabold text-gray-800">Recent Transactions</h3>
+        <div className="p-5 border-b border-gray-100 bg-gray-50 grid justify-between items-center gap-4">
+          <div className='flex gap-3'>
+            <h3 className="font-extrabold text-gray-800 hidden sm:block whitespace-nowrap">Recent Transactions</h3>
+          {/* Search Bar */}
+            <div className="relative w-full sm:w-auto">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input 
+                type="text" 
+                placeholder="Search..." 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-gray-800"
+              />
+            </div>
+          </div>
+          {/* 👇 FILTER CONTROLS UI 👇 */}
+          <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
+            
+
+            {/* 👇 DATE FILTER UI 👇 */}
+            <div className="flex items-center gap-2">
+              <input 
+                type="date" 
+                value={startDate} 
+                onChange={(e) => setStartDate(e.target.value)}
+                className="px-3 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                title="Start Date"
+              />
+              <span className="text-gray-400 text-sm font-medium">to</span>
+              <input 
+                type="date" 
+                value={endDate} 
+                onChange={(e) => setEndDate(e.target.value)}
+                className="px-3 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                title="End Date"
+                min={startDate} // End date hamesha start date ke baad ki honi chahiye
+              />
+              {/* Clear Dates Button */}
+              {(startDate || endDate) && (
+                <button 
+                  onClick={() => { setStartDate(''); setEndDate(''); }}
+                  className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition"
+                  title="Clear Dates"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+            
+            {/* Type Filter */}
+            <select 
+              value={filterType} 
+              onChange={(e) => setFilterType(e.target.value)}
+              className="px-3 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 bg-white cursor-pointer"
+            >
+              <option value="All">All Types</option>
+              <option value="Credit">Credits (+)</option>
+              <option value="Debit">Debits (-)</option>
+            </select>
+
+            {/* Sort Dropdown */}
+            <select 
+              value={sortBy} 
+              onChange={(e) => setSortBy(e.target.value)}
+              className="px-3 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 bg-white cursor-pointer"
+            >
+              <option value="newest">Newest First</option>
+              <option value="oldest">Oldest First</option>
+            </select>
+          </div>
         </div>
+
+        {/* Table Content */}
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
@@ -184,10 +280,10 @@ export default function WalletPage() {
             </thead>
             <tbody className="divide-y divide-gray-50">
               {loading ? (
-                 <tr><td colSpan="3" className="p-10 text-center text-gray-500">Loading transactions...</td></tr>
+                 <tr><td colSpan="3" className="p-10 text-center text-gray-500 font-medium">Loading transactions...</td></tr>
               ) : transactions.length === 0 ? (
                 <tr>
-                  <td colSpan="3" className="p-10 text-center text-gray-500 font-medium">No transactions found.</td>
+                  <td colSpan="3" className="p-10 text-center text-gray-500 font-medium">No transactions found matching your criteria.</td>
                 </tr>
               ) : (
                 transactions.map((txn, idx) => (
@@ -199,7 +295,9 @@ export default function WalletPage() {
                         </div>
                         <div>
                           <p className="font-bold text-gray-800">{txn.desc}</p>
-                          <p className="text-xs text-gray-400 font-medium mt-0.5 tracking-wide">TXN ID: {txn.id}</p>
+                          <p className="text-xs text-gray-400 font-medium mt-0.5 tracking-wide">
+                            {txn.id ? `TXN ID: ${txn.id}` : 'Platform Action'}
+                          </p>
                         </div>
                       </div>
                     </td>
@@ -220,7 +318,7 @@ export default function WalletPage() {
             <button 
               onClick={() => fetchWalletData(currentPage - 1)}
               disabled={currentPage === 1}
-              className="flex items-center gap-1 px-4 py-2 text-sm font-bold text-gray-600 bg-white border border-gray-200 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+              className="flex items-center gap-1 px-4 py-2 text-sm font-bold text-gray-600 bg-white border border-gray-200 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 transition-colors"
             >
               <ChevronLeft className="w-4 h-4" /> Prev
             </button>
@@ -228,7 +326,7 @@ export default function WalletPage() {
             <button 
               onClick={() => fetchWalletData(currentPage + 1)}
               disabled={currentPage === totalPages}
-              className="flex items-center gap-1 px-4 py-2 text-sm font-bold text-gray-600 bg-white border border-gray-200 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+              className="flex items-center gap-1 px-4 py-2 text-sm font-bold text-gray-600 bg-white border border-gray-200 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 transition-colors"
             >
               Next <ChevronRight className="w-4 h-4" />
             </button>
@@ -236,12 +334,10 @@ export default function WalletPage() {
         )}
       </div>
 
-      {/* Recharge Modal (Same structure, added disabled state text for button) */}
-      {/* --- RECHARGE MODAL --- */}
+      {/* RECHARGE MODAL */}
       {showRechargeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl flex flex-col overflow-hidden">
-            
             <div className="flex justify-between items-center p-6 border-b border-gray-100 bg-gray-50/50">
               <div>
                 <h3 className="font-black text-gray-900 text-2xl">Recharge Credits</h3>
@@ -264,7 +360,6 @@ export default function WalletPage() {
                         : 'border-gray-200 bg-white hover:border-blue-300 hover:shadow-sm'
                     }`}
                   >
-                    {/* Badge */}
                     {plan.tag && (
                       <span className={`absolute -top-3 right-4 px-3 py-1 text-[10px] font-black uppercase tracking-wider rounded-full ${
                         plan.tag === 'Most Popular' ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white shadow-sm' : 
@@ -308,7 +403,6 @@ export default function WalletPage() {
                 {selectedPlan && <ArrowUpRight className="w-5 h-5" />}
               </button>
             </div>
-
           </div>
         </div>
       )}

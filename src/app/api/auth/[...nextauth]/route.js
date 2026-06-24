@@ -95,6 +95,8 @@ const handler = NextAuth({
       if (user) {
         token.id = user.id;
         token.isComplete = user.isComplete;
+        token.phone = user.phone;
+        token.ownerName = user.ownerName;
       }
       // अगर प्रोफाइल अपडेट होती है, तो टोकन भी अपडेट करें
       if (trigger === "update" && session?.isComplete) {
@@ -108,6 +110,8 @@ const handler = NextAuth({
       if (token?.id) {
         session.user.id = token.id;
         session.user.isComplete = token.isComplete;
+        session.user.phone = token.phone;
+        session.user.ownerName = token.ownerName;
       }
       return session;
     }

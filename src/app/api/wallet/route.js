@@ -8,12 +8,17 @@ export async function GET(request) {
   try {
     await connectToDatabase();
 
-    // URL से Pagination parameters निकालें (default page=1, limit=5)
+    // URL से Pagination और Filter parameters निकालें
     const url = new URL(request.url);
     const page = parseInt(url.searchParams.get("page") || "1");
     const limit = parseInt(url.searchParams.get("limit") || "5");
     const skip = (page - 1) * limit;
     
+    // 👇 Naye Filter, Sort, aur Search params 👇
+    const search = url.searchParams.get('search') || '';
+    const type = url.searchParams.get('type') || 'All';
+    const sort = url.searchParams.get('sort') || 'newest';
+
     // 1. चेक करें कि कौन लॉगिन है
     const session = await getServerSession();
     if (!session || !session.user) {
@@ -26,17 +31,51 @@ export async function GET(request) {
       return NextResponse.json({ success: false, message: 'Cafe not found' }, { status: 404 });
     }
 
-    // 3. कुल ट्रांज़ैक्शन की गिनती करें (Total Pages कैलकुलेट करने के लिए)
-    const totalTransactions = await Ledger.countDocuments({ cafeId: cafe._id });
-    const totalPages = Math.ceil(totalTransactions / limit);
+    // 3. --- DYNAMIC QUERY BUILDER ---
+    let query = { cafeId: cafe._id };
 
-    // 4. इस कैफे की Ledger एंट्रीज़ निकालें (Pagination के साथ)
-    const ledgerEntries = await Ledger.find({ cafeId: cafe._id })
-      .sort({ createdAt: -1 })
+    // A. Type Filter (Credit/Debit)
+    if (type !== 'All') {
+      query.transactionType = type;
+    }
+
+    // B. Search Logic (Description या Reference ID में खोजें)
+    if (search) {
+      query.$or = [
+        { description: { $regex: search, $options: 'i' } },
+        { referenceId: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    // 4. --- DYNAMIC SORTING LOGIC ---
+    let sortOptions = {};
+    switch (sort) {
+      case 'oldest':
+        sortOptions = { createdAt: 1 };
+        break;
+      case 'amount_high':
+        sortOptions = { amount: -1 };
+        break;
+      case 'amount_low':
+        sortOptions = { amount: 1 };
+        break;
+      case 'newest':
+      default:
+        sortOptions = { createdAt: -1 };
+        break;
+    }
+
+    // 5. कुल ट्रांज़ैक्शन की गिनती करें (Total Pages कैलकुलेट करने के लिए)
+    const totalTransactions = await Ledger.countDocuments(query);
+    const totalPages = Math.ceil(totalTransactions / limit) || 1; // Kam se kam 1 page toh rahe
+
+    // 6. इस कैफे की Ledger एंट्रीज़ निकालें (Filter, Sort aur Pagination के साथ)
+    const ledgerEntries = await Ledger.find(query)
+      .sort(sortOptions)
       .skip(skip)
       .limit(limit);
 
-    // 5. डेटा को Frontend के हिसाब से फॉर्मेट करें
+    // 7. डेटा को Frontend के हिसाब से फॉर्मेट करें
     const formattedTransactions = ledgerEntries.map(entry => ({
       id: entry._id.toString().slice(-6).toUpperCase(), // ID के आखिरी 6 अक्षर
       type: entry.transactionType,

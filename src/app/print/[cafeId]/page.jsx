@@ -302,7 +302,7 @@ export default function CustomerPrintPortal() {
       return;
     }
     if (!isId && !files.doc) {
-      alert("Please upload a document to proceed.");
+      alert("Please upload a PDF to proceed.");
       return;
     }
     setStep(2);
@@ -385,7 +385,9 @@ export default function CustomerPrintPortal() {
             {isIdMode ? <ImageIcon className="w-8 h-8 text-indigo-500" /> : <UploadCloud className="w-8 h-8 text-indigo-500" />}
           </div>
           <span className="text-slate-700 font-semibold tracking-tight text-lg">Select {label}</span>
-          <span className="text-sm text-slate-400 mt-1 font-medium">PDF, JPG, PNG (Max 10MB)</span>
+          <span className="text-sm text-slate-400 mt-1 font-medium">
+            {label?.toLowerCase() === 'document' ? 'PDF (Max 10MB)' : 'JPG, PNG (Max 10MB)'}
+          </span>
           <input type="file" className="hidden" accept=".pdf, image/*" onChange={(e) => handleFileChange(type, e)} />
         </label>
       );
@@ -469,7 +471,7 @@ export default function CustomerPrintPortal() {
             
             <div className="grid grid-cols-4 gap-3 mb-8">
               {[
-                { id: 'Document', icon: FileText, label: 'Doc/Img' },
+                { id: 'Document', icon: FileText, label: 'PDF' },
                 { id: 'Aadhar', icon: UserSquare, label: 'Aadhar' },
                 { id: 'PAN', icon: CreditCard, label: 'PAN' },
                 { id: 'Voter', icon: CreditCard, label: 'Voter' }
@@ -529,16 +531,17 @@ export default function CustomerPrintPortal() {
                         <div className="flex justify-between items-end mb-3">
                             <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider">2. Pages to Print</h3>
                             <span className="text-indigo-700 bg-indigo-50 border border-indigo-100 px-2.5 py-1 rounded-lg text-xs font-bold">Total: {calculatedPages} pg</span>
-                        </div>
-                        <input type="text" value={printSettings.pageRange} onChange={(e) => setPrintSettings({...printSettings, pageRange: e.target.value})}
+                        </div>{/**value={printSettings.pageRange} */}
+                        <input type="text" value={`Total ${calculatedPages} Pages`} onChange={(e) => setPrintSettings({...printSettings, pageRange: e.target.value})}
                             placeholder="e.g., All, 1-5, or enter total pages" 
-                            className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 focus:outline-none transition-all font-semibold text-slate-700" />
-                        <p className="text-xs text-slate-500 mt-2 flex items-center gap-1.5">
+                            disabled
+                            className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 focus:outline-none transition-all font-semibold text-orange-500" />
+                        {/*<p className="text-xs text-slate-500 mt-2 flex items-center gap-1.5">
                             <FileStack className="w-3.5 h-3.5" />
                             {files.doc?.type === 'application/pdf' 
                             ? `${pdfTotalPages} pages detected in PDF. Leave "All" or type range (e.g. 1-5).` 
                             : 'Leave "All" for single page, or specify count.'}
-                        </p>
+                        </p>*/}
                     </div>
                 )}
 
