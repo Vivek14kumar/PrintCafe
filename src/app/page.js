@@ -39,9 +39,9 @@ const HeroSection = () => {
           <Link href="/register" className="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white px-8 py-4 rounded-2xl font-bold text-lg transition-all shadow-lg shadow-blue-900/50 hover:shadow-blue-600/40 hover:-translate-y-1 flex items-center justify-center gap-2 border border-blue-500/30">
             Start Free Trial <ArrowRight className="h-5 w-5" />
           </Link>
-          <a href="#demo" className="w-full sm:w-auto bg-slate-800/50 hover:bg-slate-800 text-white border border-slate-700 px-8 py-4 rounded-2xl font-bold text-lg transition-all flex items-center justify-center gap-2 backdrop-blur-sm hover:-translate-y-0.5">
+          <Link href="https://youtu.be/DiEkBPuC3Rg" target="_blank" rel="noopener noreferrer" className="w-full sm:w-auto bg-slate-800/50 hover:bg-slate-800 text-white border border-slate-700 px-8 py-4 rounded-2xl font-bold text-lg transition-all flex items-center justify-center gap-2 backdrop-blur-sm hover:-translate-y-0.5">
             <PlayCircle className="h-5 w-5 text-blue-400" /> Watch Demo
-          </a>
+          </Link>
         </div>
 
         {/* Real-world Social Proof */}

@@ -512,7 +512,7 @@ export default function DashboardPage() {
               
               <button 
                 onClick={() => {
-                  toast.success("Payment verified! Opening print preview...", { icon: '✅' });
+                  toast.success("Payment verified! Opening print preview...", { icon: '✔' });
                   openPrintFrame(paymentCheckJob);
                   setPaymentCheckJob(null);
                 }} 
