@@ -302,7 +302,7 @@ export default function CustomerPrintPortal() {
       return;
     }
     if (!isId && !files.doc) {
-      alert("Please upload a PDF to proceed.");
+      alert("Please upload a Document to proceed.");
       return;
     }
     setStep(2);
@@ -386,7 +386,7 @@ export default function CustomerPrintPortal() {
           </div>
           <span className="text-slate-700 font-semibold tracking-tight text-lg">Select {label}</span>
           <span className="text-sm text-slate-400 mt-1 font-medium">
-            {label?.toLowerCase() === 'document' ? 'PDF (Max 10MB)' : 'JPG, PNG (Max 10MB)'}
+            {label?.toLowerCase() === 'document' ? 'PDF, JPG, PNG (Max 10MB)' : 'JPG, PNG (Max 10MB)'}
           </span>
           <input type="file" className="hidden" accept=".pdf, image/*" onChange={(e) => handleFileChange(type, e)} />
         </label>
@@ -471,7 +471,7 @@ export default function CustomerPrintPortal() {
             
             <div className="grid grid-cols-4 gap-3 mb-8">
               {[
-                { id: 'Document', icon: FileText, label: 'PDF' },
+                { id: 'Document', icon: FileText, label: 'PDF, Image' },
                 { id: 'Aadhar', icon: UserSquare, label: 'Aadhar' },
                 { id: 'PAN', icon: CreditCard, label: 'PAN' },
                 { id: 'Voter', icon: CreditCard, label: 'Voter' }

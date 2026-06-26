@@ -107,7 +107,7 @@ export default function DashboardPage() {
     }
   };
 
-  const openPrintFrame = async (job) => {
+  /*const openPrintFrame = async (job) => {
     setActionLoading(job._id);
     try {
       if (job.frontFileUrl && job.backFileUrl) {
@@ -151,6 +151,98 @@ export default function DashboardPage() {
     } catch (error) {
       console.warn("Direct load failed, using Google Docs Fallback");
       setPdfBlobUrl(`https://docs.google.com/gview?url=${job.fileUrl}&embedded=true`);
+      setPrintModalJob({ ...job, isCorsFallback: true });
+      setPreviewJob(null);
+    } finally {
+      setActionLoading(null);
+    }
+  };*/
+  const openPrintFrame = async (job) => {
+    setActionLoading(job._id);
+    try {
+      // 1. Handle Two-Sided Documents (Aadhar, PAN, etc.)
+      if (job.frontFileUrl && job.backFileUrl) {
+        const htmlContent = `
+          <html>
+            <head>
+              <style>
+                body { margin: 0; display: flex; flex-direction: row; justify-content: center; align-items: flex-start; gap: 15px; background: white; padding-top: 40px; }
+                img { width: 45%; max-height: 50vh; object-fit: contain; padding: 2px; }
+                @media print {
+                  @page { margin: 10mm; }
+                  body { padding-top: 20px; }
+                  img { page-break-inside: avoid; }
+                }
+              </style>
+            </head>
+            <body oncontextmenu="return false;">
+              <img src="${job.frontFileUrl}" crossorigin="anonymous" />
+              <img src="${job.backFileUrl}" crossorigin="anonymous" />
+            </body>
+          </html>
+        `;
+        const htmlBlob = new Blob([htmlContent], { type: 'text/html' });
+        setPdfBlobUrl(URL.createObjectURL(htmlBlob));
+        setPrintModalJob(job);
+        setPreviewJob(null);
+        return;
+      }
+
+      // 2. Handle Single File
+      const fileResponse = await fetch(job.fileUrl);
+      if (!fileResponse.ok) throw new Error("CORS Blocked");
+      
+      const rawBlob = await fileResponse.blob();
+      const urlLower = job.fileUrl.toLowerCase();
+      
+      // 🌟 NAYA LOGIC: Check Blob Type OR URL Structure for Cloudinary Raw files
+      const isImage = 
+        rawBlob.type.startsWith('image/') || 
+        urlLower.includes('/images/') || 
+        urlLower.includes('img-');
+
+      if (isImage) {
+        const htmlContent = `
+          <html>
+            <head>
+              <style>
+                body { margin: 0; display: flex; justify-content: center; align-items: flex-start; padding-top: 20px; background: white; }
+                img { max-width: 90%; max-height: 90vh; object-fit: contain; }
+                @media print {
+                  @page { margin: 10mm; }
+                  body { padding-top: 0; display: block; }
+                  img { max-width: 100%; max-height: none; page-break-inside: avoid; }
+                }
+              </style>
+            </head>
+            <body oncontextmenu="return false;">
+              <img src="${job.fileUrl}" crossorigin="anonymous" />
+            </body>
+          </html>
+        `;
+        const htmlBlob = new Blob([htmlContent], { type: 'text/html' });
+        setPdfBlobUrl(URL.createObjectURL(htmlBlob));
+      } else {
+        // Agar image nahi hai, toh ise PDF manenge (jaise aapke jameen se sambandhit form wale PDFs)
+        const secureBlob = new Blob([rawBlob], { type: 'application/pdf' });
+        const securedUrl = URL.createObjectURL(secureBlob) + '#toolbar=0&navpanes=0&scrollbar=0';
+        setPdfBlobUrl(securedUrl);
+      }
+
+      setPrintModalJob(job);
+      setPreviewJob(null);
+
+    } catch (error) {
+      console.warn("Direct load failed, using Fallback");
+      
+      const urlLower = job.fileUrl.toLowerCase();
+      // Fallback me bhi wahi smart check lagaya gaya hai
+      const isImageFallback = 
+        urlLower.match(/\.(jpeg|jpg|png|gif|webp)$/i) || 
+        urlLower.includes('/images/') || 
+        urlLower.includes('img-');
+
+      setPdfBlobUrl(isImageFallback ? job.fileUrl : `https://docs.google.com/gview?url=${job.fileUrl}&embedded=true`);
       setPrintModalJob({ ...job, isCorsFallback: true });
       setPreviewJob(null);
     } finally {
