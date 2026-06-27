@@ -1,15 +1,18 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import Pusher from 'pusher-js'; 
-import { Wallet, PlusCircle, Clock, CheckCircle, XCircle, Printer,IndianRupee, RefreshCw, Eye, Smartphone, Banknote, ShieldAlert, X, TrendingUp, Infinity, Zap, AlertTriangle } from 'lucide-react';
+import { Wallet, Edit, PlusCircle, Clock, CheckCircle, XCircle, Printer,IndianRupee, RefreshCw, Eye, Smartphone, Banknote, ShieldAlert, X, TrendingUp, Infinity, Zap, AlertTriangle } from 'lucide-react';
 // 🌟 NEW: Toast notification ke liye import
 import toast, { Toaster } from 'react-hot-toast';
+import ImageEditorModal from '@/components/ImageEditor';
 
 export default function DashboardPage() {
   const { data: session, status } = useSession();
-  
+  const router = useRouter();
+
   const [walletBalance, setWalletBalance] = useState(0);
   const [walletType, setWalletType] = useState('credit');
   const [printQueue, setPrintQueue] = useState([]);
@@ -25,6 +28,11 @@ export default function DashboardPage() {
 
   // 🌟 NEW: Payment check modal ke liye state
   const [paymentCheckJob, setPaymentCheckJob] = useState(null);
+
+  // Image Editor States
+  const [editingImageUrl, setEditingImageUrl] = useState(null);
+  const [editingJobField, setEditingJobField] = useState(null); // 'fileUrl', 'frontFileUrl', ya 'backFileUrl'
+  const [editingJobId, setEditingJobId] = useState(null);
 
   useEffect(() => {
     const savedKioskSetting = localStorage.getItem('kioskMode');
@@ -160,8 +168,13 @@ export default function DashboardPage() {
   const openPrintFrame = async (job) => {
     setActionLoading(job._id);
     try {
-      // 1. Handle Two-Sided Documents (Aadhar, PAN, etc.)
-      if (job.frontFileUrl && job.backFileUrl) {
+      // 🌟 UPDATED: Handle ID Cards even if only one side is uploaded
+      const isIdCategory = ['Aadhar', 'PAN', 'Voter', 'Other ID'].includes(job.docCategory);
+      
+      if (isIdCategory && (job.frontFileUrl || job.backFileUrl)) {
+        const imagesToRender = [];
+        if (job.frontFileUrl) imagesToRender.push(`<img src="${job.frontFileUrl}" crossorigin="anonymous" />`);
+        if (job.backFileUrl) imagesToRender.push(`<img src="${job.backFileUrl}" crossorigin="anonymous" />`);
         const htmlContent = `
           <html>
             <head>
@@ -423,8 +436,33 @@ export default function DashboardPage() {
                         <span className="text-sm font-bold text-gray-800">{job.customerName}</span>
                       </div>
                       <span className="font-bold text-gray-900 flex items-center gap-2">
-                        {job.docCategory} {job.docCategory !== 'Document' && 'Card'}
+                        {job.docCategory}
                       </span>
+
+                      {/* 🌟 NAYA: Open Pro Studio Buttons (Merged Front/Back & JobId) */}
+                      <div className="mt-2 flex gap-2 flex-wrap">
+                        {(job.docCategory === 'Image' || job.docCategory === 'Other ID') && job.fileUrl && (
+                          <button 
+                            onClick={() => router.push(`/dashboard/studio?jobId=${job._id}&imageUrl=${encodeURIComponent(job.fileUrl)}`)} 
+                            className="text-[10px] bg-blue-50 text-blue-600 px-2 py-1 rounded font-bold border border-blue-100 hover:bg-blue-100 flex items-center gap-1"
+                          >
+                            <Edit size={14}/> Edit in Studio
+                          </button>
+                        )}
+                        {(job.docCategory === 'Aadhar' || job.docCategory === 'PAN' || job.docCategory === 'Voter' || job.docCategory === 'Other ID') && (job.frontFileUrl || job.backFileUrl) && (
+                          <button 
+                            onClick={() => {
+                              let url = `/dashboard/studio?jobId=${job._id}`;
+                              if (job.frontFileUrl) url += `&frontUrl=${encodeURIComponent(job.frontFileUrl)}`;
+                              if (job.backFileUrl) url += `&backUrl=${encodeURIComponent(job.backFileUrl)}`;
+                              router.push(url);
+                            }} 
+                            className="text-[10px] bg-blue-50 text-blue-600 px-2 py-1 rounded font-bold border border-blue-100 hover:bg-blue-100 flex items-center gap-1"
+                          >
+                            <Edit size={14}/> Edit {job.docCategory} Card
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </td>
                   
@@ -694,6 +732,33 @@ export default function DashboardPage() {
 
           </div>
         </div>
+      )}
+
+      {/* 🚀 IMAGE EDITOR MODAL */}
+      {editingImageUrl && (
+        <ImageEditorModal 
+          imageUrl={editingImageUrl}
+          onClose={() => {
+            setEditingImageUrl(null);
+            setEditingJobField(null);
+            setEditingJobId(null);
+          }}
+          onSave={(newCroppedUrl) => {
+            // Queue me job ko update karo naye cropped URL ke sath
+            setPrintQueue(prevQueue => prevQueue.map(job => {
+              if (job._id === editingJobId) {
+                return { ...job, [editingJobField]: newCroppedUrl };
+              }
+              return job;
+            }));
+            
+            // Modal close karo
+            setEditingImageUrl(null);
+            setEditingJobField(null);
+            setEditingJobId(null);
+            toast.success("Image cropped successfully! Now you can print.");
+          }}
+        />
       )}
 
     </div>

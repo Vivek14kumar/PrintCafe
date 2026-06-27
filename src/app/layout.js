@@ -71,6 +71,10 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en" className="scroll-smooth">
+      <head>
+        {/* 👇 Ye line add karni hai */}
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css" />
+      </head>
       <body className={inter.className}>
         <AuthProvider>
           {/* 🌟 सारा मैजिक अब इस Wrapper के अंदर होगा */}

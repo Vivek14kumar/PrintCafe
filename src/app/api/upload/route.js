@@ -78,7 +78,7 @@ export async function POST(request) {
     const pageRange = formData.get('pageRange') || 'All';
 
     let fileUrl = null, frontFileUrl = null, backFileUrl = null;
-    const isIdMode = ['Aadhar', 'PAN', 'Voter'].includes(docCategory);
+    const isIdMode = ['Aadhar', 'PAN', 'Voter', 'Other ID'].includes(docCategory);
 
     // फाइल्स को सीधे Cloudinary पर अपलोड करें
     if (isIdMode) {

@@ -7,7 +7,7 @@ const printJobSchema = new mongoose.Schema({
   customerName: { type: String, default: 'Guest' },
   tokenNumber: { type: String, required: true }, // 4-digit code (e.g., "4092")
   
-  docCategory: { type: String, enum: ['Document', 'Aadhar', 'PAN', 'Voter'], default: 'Document' },
+  docCategory: { type: String, enum: ['Document', 'Aadhar', 'PAN', 'Voter', 'Image', 'Other ID'], default: 'Document' },
   fileName: { type: String },
   fileUrl: { type: String }, 
   frontFileUrl: { type: String }, 

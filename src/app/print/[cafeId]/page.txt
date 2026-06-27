@@ -4,11 +4,11 @@ import { useParams } from 'next/navigation';
 import { 
   UploadCloud, FileText, RefreshCw, CheckCircle, Store, AlertCircle, 
   Loader2, CreditCard, UserSquare, Smartphone, Banknote, Image as ImageIcon, 
-  X, Lock, Printer, Receipt, IndianRupee, FileStack, ChevronRight, Trash2 
+  X, Lock, Printer, Receipt,IndianRupee, FileStack, ChevronRight, Trash2 
 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
-import QRCode from "react-qr-code";
+import QRCode from "react-qr-code"; // 🌟 NEW: QR Code Import
 
 export default function CustomerPrintPortal() {
   const params = useParams();
@@ -22,8 +22,7 @@ export default function CustomerPrintPortal() {
   const [step, setStep] = useState(1); 
   const [isUploading, setIsUploading] = useState(false);
   
-  // 🌟 UPDATED: Category list me naye options add honge
-  const [docCategory, setDocCategory] = useState('Document'); 
+  const [docCategory, setDocCategory] = useState('Document'); // Document, Aadhar, PAN, Voter
 
   // File & Preview States
   const [files, setFiles] = useState({ doc: null, front: null, back: null });
@@ -39,10 +38,11 @@ export default function CustomerPrintPortal() {
   const [customerName, setCustomerName] = useState('');
   const [orderToken, setOrderToken] = useState('');
 
-  // QR Code Popup & Link
+  // 🌟 NEW STATES: QR Code Popup & Link
   const [showQRModal, setShowQRModal] = useState(false);
   const [upiLink, setUpiLink] = useState('');
-  const [timeLeft, setTimeLeft] = useState(300); 
+  // 🌟 NEW: Timer States for Payment Modal
+  const [timeLeft, setTimeLeft] = useState(300); // 5 मिनट = 300 सेकंड
 
   // Local Storage States
   const [sessionTokens, setSessionTokens] = useState(() => {
@@ -152,53 +152,68 @@ export default function CustomerPrintPortal() {
   }, [printSettings.pageRange, pdfTotalPages]);
 
   // Calculate Total Price
-  const isIdMode = ['Aadhar', 'PAN', 'Voter', 'Other ID'].includes(docCategory);
-  
   useEffect(() => {
     const rate = printSettings.type === 'Color' ? (cafeData?.settings?.colorRate || 10) : (cafeData?.settings?.bwRate || 5);
-    const pagesToCharge = isIdMode ? 1 : calculatedPages;
+    const isId = ['Aadhar', 'PAN', 'Voter'].includes(docCategory);
+    
+    const pagesToCharge = isId ? 1 : calculatedPages;
     setTotalPrice(pagesToCharge * printSettings.copies * rate);
-  }, [calculatedPages, printSettings.type, printSettings.copies, docCategory, cafeData, isIdMode]);
+  }, [calculatedPages, printSettings.type, printSettings.copies, docCategory, cafeData]);
 
+  // 🌟 NEW: Auto-Close Modal when user returns from UPI App
   useEffect(() => {
     const handleVisibilityChange = () => {
+      // अगर मोडल खुला है और यूज़र वापस ब्राउज़र टैब पर आया है
       if (document.visibilityState === "visible" && showQRModal) {
-        setTimeout(() => setShowQRModal(false), 800); 
+        // थोड़ा डिले (800ms) देकर मोडल को ऑटो-क्लोज कर दें, ताकि एकदम से न भागे
+        setTimeout(() => {
+          setShowQRModal(false);
+        }, 800); 
       }
     };
+
     document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [showQRModal]);
   
+  // 🌟 NEW: Payment Gateway Timer & Auto-Close Logic
   useEffect(() => {
     let interval;
     if (showQRModal) {
+      // मोडल खुलते ही टाइमर 5 मिनट (300s) पर सेट करें
       setTimeLeft(300); 
+      
       interval = setInterval(() => {
         setTimeLeft((prev) => {
           if (prev <= 1) {
             clearInterval(interval);
-            setShowQRModal(false);
+            setShowQRModal(false); // टाइम खत्म होने पर अपने-आप मोडल बंद
             return 0;
           }
           return prev - 1;
         });
       }, 1000);
     } else {
-      setTimeLeft(300);
+      setTimeLeft(300); // मोडल बंद होने पर रीसेट कर दें
     }
+
     return () => clearInterval(interval);
   }, [showQRModal]);
 
+  // टाइम को MM:SS फॉर्मेट में दिखाने के लिए (जैसे 04:59)
   const formatTime = (seconds) => {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
+  // शुरू के 10 सेकंड तक बटन डिसेबल रहेगा
   const isButtonDisabled = timeLeft > 290; 
-  const secondsToWait = timeLeft - 290; 
+  const secondsToWait = timeLeft - 290; // उल्टी गिनती (10, 9, 8...)
 
+  // Check Live Status
   const checkLiveStatus = async (tokenNum) => {
     try {
       const res = await fetch(`/api/upload/status?token=${tokenNum}`);
@@ -226,6 +241,7 @@ export default function CustomerPrintPortal() {
     }
   };
 
+  // Handle File Selection & PDF Scanning
   const handleFileChange = (type, e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -278,53 +294,25 @@ export default function CustomerPrintPortal() {
     setPreviews(prev => ({ ...prev, [type]: null }));
   };
 
-  // 🌟 UPDATED: Validation rules for PDF vs Image and Optional ID sides
+  // Validation
   const validateStep1 = () => {
-    // 🌟 PAN ko is list se hata diya gaya hai taaki back side zaroori na rahe
-    const isStrictId = ['Aadhar', 'Voter'].includes(docCategory);
-    const isOtherIdOrPan = ['Other ID', 'PAN'].includes(docCategory);
-
-    // Aadhar aur Voter ke liye dono side zaroori hain
-    if (isStrictId && (!files.front || !files.back)) {
+    const isId = ['Aadhar', 'PAN', 'Voter'].includes(docCategory);
+    if (isId && (!files.front || !files.back)) {
       alert(`Please upload both FRONT and BACK sides of your ${docCategory}.`);
       return;
     }
-    
-    // PAN aur Other ID ke liye kam se kam ek side (Front) zaroori hai
-    if (isOtherIdOrPan && !files.front && !files.back) {
-      alert(`Please upload at least the Front side for your ${docCategory}.`);
+    if (!isId && !files.doc) {
+      alert("Please upload a Document to proceed.");
       return;
     }
-
-    if (docCategory === 'Document') {
-      if (!files.doc) {
-        alert("Please upload a PDF document.");
-        return;
-      }
-      if (files.doc.type !== 'application/pdf') {
-        alert("Only PDF files are allowed in this category.");
-        return;
-      }
-    }
-
-    if (docCategory === 'Image') {
-      if (!files.doc) {
-        alert("Please upload an image.");
-        return;
-      }
-      if (!files.doc.type.startsWith('image/')) {
-        alert("Only Image files (JPG, PNG, etc.) are allowed in this category.");
-        return;
-      }
-    }
-
     setStep(2);
   };
 
-  // 🌟 UPDATED: Prevent appending undefined files to formData
+  // 🌟 UPDATED: 1-Click Upload & Payment
   const handlePaymentAndSubmit = async (method) => {
     setIsUploading(true);
 
+    // Prepare UPI URL if selected
     let generatedUpiUrl = '';
     if (method === 'UPI') {
       generatedUpiUrl = `upi://pay?pa=${cafeData?.upiId || 'merchant@upi'}&pn=${cafeData?.shopName}&am=${totalPrice}&cu=INR`;
@@ -341,11 +329,12 @@ export default function CustomerPrintPortal() {
     formData.append('customerName', customerName || 'Guest');
     formData.append('pageRange', printSettings.pageRange === 'All' ? calculatedPages.toString() : printSettings.pageRange);
     
-    if (isIdMode) {
-        if (files.front) formData.append('fileFront', files.front);
-        if (files.back) formData.append('fileBack', files.back);
+    const isId = ['Aadhar', 'PAN', 'Voter'].includes(docCategory);
+    if (isId) {
+        formData.append('fileFront', files.front);
+        formData.append('fileBack', files.back);
     } else {
-        if (files.doc) formData.append('file', files.doc);
+        formData.append('file', files.doc);
     }
 
     try {
@@ -362,13 +351,14 @@ export default function CustomerPrintPortal() {
         setIsUploading(false);
         setStep(4); 
 
+        // 🌟 Smart Device Detection & App Launch
         if (method === 'UPI') {
           const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
           if (isMobile) {
-            window.location.href = generatedUpiUrl; 
-            setShowQRModal(true); 
+            window.location.href = generatedUpiUrl; // Direct App open
+            setShowQRModal(true); // Fallback if app doesn't open
           } else {
-            setShowQRModal(true); 
+            setShowQRModal(true); // Desktop -> Show QR
           }
         }
       } else {
@@ -382,39 +372,23 @@ export default function CustomerPrintPortal() {
     }
   };
 
-  // 🌟 UPDATED: Dynamic accept types and UI text
+  const isIdMode = ['Aadhar', 'PAN', 'Voter'].includes(docCategory);
+
   const renderPreviewBox = (type, label) => {
     const file = files[type];
     const previewUrl = previews[type];
 
-    let acceptString = "*/*";
-    let formatText = "";
-    
-    if (docCategory === 'Document') {
-      acceptString = "application/pdf";
-      formatText = "PDF Only (Max 10MB)";
-    } else if (docCategory === 'Image') {
-      acceptString = "image/jpeg, image/png, image/webp, image/jpg";
-      formatText = "JPG, PNG, WEBP (Max 10MB)";
-    } else if (isIdMode) {
-      acceptString = "image/*, application/pdf";
-      formatText = "Image or PDF (Max 10MB)";
-    }
-
     if (!file) {
       return (
-        <label className="flex flex-col items-center justify-center w-full h-56 border-2 border-dashed border-indigo-200 bg-white/50 hover:bg-indigo-50/50 hover:border-indigo-400 transition-all duration-300 rounded-2xl cursor-pointer group shadow-sm relative">
-          
-          {docCategory === 'Other ID' && (
-             <span className="absolute top-2 right-3 text-[10px] font-bold text-slate-400 uppercase bg-slate-100 px-2 py-0.5 rounded-full">Optional</span>
-          )}
-
+        <label className="flex flex-col items-center justify-center w-full h-56 border-2 border-dashed border-indigo-200 bg-white/50 hover:bg-indigo-50/50 hover:border-indigo-400 transition-all duration-300 rounded-2xl cursor-pointer group shadow-sm">
           <div className="bg-indigo-50 p-4 rounded-full shadow-inner mb-4 group-hover:scale-110 group-hover:bg-indigo-100 transition-all duration-300">
             {isIdMode ? <ImageIcon className="w-8 h-8 text-indigo-500" /> : <UploadCloud className="w-8 h-8 text-indigo-500" />}
           </div>
           <span className="text-slate-700 font-semibold tracking-tight text-lg">Select {label}</span>
-          <span className="text-sm text-slate-400 mt-1 font-medium">{formatText}</span>
-          <input type="file" className="hidden" accept={acceptString} onChange={(e) => handleFileChange(type, e)} />
+          <span className="text-sm text-slate-400 mt-1 font-medium">
+            {label?.toLowerCase() === 'document' ? 'PDF, JPG, PNG (Max 10MB)' : 'JPG, PNG (Max 10MB)'}
+          </span>
+          <input type="file" className="hidden" accept=".pdf, image/*" onChange={(e) => handleFileChange(type, e)} />
         </label>
       );
     }
@@ -455,6 +429,7 @@ export default function CustomerPrintPortal() {
   return (
     <div className="min-h-screen bg-slate-50 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px] flex flex-col items-center p-4 sm:p-6 font-sans pb-24">
       
+      {/* Header */}
       <header className="w-full max-w-md flex flex-col items-center py-6 mb-2">
         <div className="p-1 rounded-xl shadow-md shadow-blue-500/20 group-hover:scale-105 transition-transform">
                     <Image 
@@ -473,6 +448,7 @@ export default function CustomerPrintPortal() {
 
       <main className="w-full max-w-md bg-white/80 backdrop-blur-xl rounded-[2rem] shadow-xl shadow-slate-200/50 border border-white overflow-hidden relative flex flex-col">
         
+        {/* Progress Bar indicator */}
         <div className="absolute top-0 left-0 w-full h-1 bg-slate-100 z-10">
             <div className="h-full bg-indigo-600 transition-all duration-500 ease-out" style={{ width: `${(step / 4) * 100}%` }} />
         </div>
@@ -493,37 +469,28 @@ export default function CustomerPrintPortal() {
                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl mb-6 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 focus:outline-none transition-all placeholder:text-slate-400 font-medium text-slate-700"
             />
             
-            {/* 🌟 UPDATED: Grid cols 3 to fit all 6 options nicely */}
-            <div className="grid grid-cols-3 gap-3 mb-8">
+            <div className="grid grid-cols-4 gap-3 mb-8">
               {[
-                { id: 'Document', icon: FileText, label: 'PDF Only' },
-                { id: 'Image', icon: ImageIcon, label: 'Image' },
+                { id: 'Document', icon: FileText, label: 'PDF, Image' },
                 { id: 'Aadhar', icon: UserSquare, label: 'Aadhar' },
                 { id: 'PAN', icon: CreditCard, label: 'PAN' },
-                { id: 'Voter', icon: CreditCard, label: 'Voter' },
-                { id: 'Other ID', icon: FileStack, label: 'Other ID' }
+                { id: 'Voter', icon: CreditCard, label: 'Voter' }
               ].map(cat => (
                 <button key={cat.id} onClick={() => {setDocCategory(cat.id); setFiles({doc:null, front:null, back:null});}} 
                   className={`p-3 rounded-2xl flex flex-col items-center justify-center gap-2 transition-all duration-200 ${docCategory === cat.id ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20 scale-105' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 hover:border-slate-300'}`}>
                   <cat.icon className={`w-6 h-6 ${docCategory === cat.id ? 'text-indigo-100' : 'text-slate-400'}`} />
-                  <span className="text-[11px] font-semibold tracking-wide text-center leading-tight">{cat.label}</span>
+                  <span className="text-[11px] font-semibold tracking-wide">{cat.label}</span>
                 </button>
               ))}
             </div>
             
             <div className="space-y-4 mb-6">
               {!isIdMode ? (
-                renderPreviewBox('doc', docCategory === 'Image' ? 'Image' : 'Document')
+                renderPreviewBox('doc', 'Document')
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {renderPreviewBox('front', 'Front Side')}
-                  
-                  {/* 🌟 NAYA: PAN aur Other ID ke liye Back Side Optional dikhayein */}
-                  {renderPreviewBox('back', 
-                    (docCategory === 'PAN' || docCategory === 'Other ID') 
-                      ? <span> Back Side <span className="absolute top-2 right-3 text-[10px] font-bold text-slate-400 uppercase bg-slate-100 px-2 py-0.5 rounded-full">Optional</span></span>
-                      : 'Back Side'
-                  )}
+                  {renderPreviewBox('back', 'Back Side')}
                 </div>
               )}
             </div>
@@ -564,11 +531,17 @@ export default function CustomerPrintPortal() {
                         <div className="flex justify-between items-end mb-3">
                             <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider">2. Pages to Print</h3>
                             <span className="text-indigo-700 bg-indigo-50 border border-indigo-100 px-2.5 py-1 rounded-lg text-xs font-bold">Total: {calculatedPages} pg</span>
-                        </div>
+                        </div>{/**value={printSettings.pageRange} */}
                         <input type="text" value={`Total ${calculatedPages} Pages`} onChange={(e) => setPrintSettings({...printSettings, pageRange: e.target.value})}
                             placeholder="e.g., All, 1-5, or enter total pages" 
                             disabled
                             className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 focus:outline-none transition-all font-semibold text-orange-500" />
+                        {/*<p className="text-xs text-slate-500 mt-2 flex items-center gap-1.5">
+                            <FileStack className="w-3.5 h-3.5" />
+                            {files.doc?.type === 'application/pdf' 
+                            ? `${pdfTotalPages} pages detected in PDF. Leave "All" or type range (e.g. 1-5).` 
+                            : 'Leave "All" for single page, or specify count.'}
+                        </p>*/}
                     </div>
                 )}
 
@@ -605,20 +578,41 @@ export default function CustomerPrintPortal() {
                 <div className="space-y-4 mb-8">
                     <button onClick={() => handlePaymentAndSubmit('UPI')} disabled={isUploading} className="w-full p-4 border-2 border-emerald-500 bg-emerald-50 text-emerald-900 rounded-2xl flex items-center gap-4 text-left group hover:bg-emerald-100 transition-colors shadow-sm">
                         <div className="bg-white p-2 rounded-2xl border border-gray-200 shadow-sm flex items-center justify-center w-20 h-20">
+                          {/* Bade size ka UPI Logo */}
                           <img src="/UPI-Logo-vector.svg" alt="UPI" className="w-full h-auto object-contain" />
                         </div>
                         <div>
                         <h4 className="font-bold text-lg leading-tight">Pay via UPI</h4>
+
+                        {/* Icons Container */}
                         <div className="flex items-center gap-3 mt-2.5 opacity-90">
-                            <img src="/Google_Pay_Logo.svg" alt="Google Pay" className="h-3.5 object-contain" />
-                            <img src="/PhonePe_Logo.svg" alt="PhonePe" className="h-5 object-contain" />
-                            <img src="/Paytm.svg" alt="Paytm" className="h-3.5 object-contain" />
+                            {/* GPay Logo */}
+                            <img 
+                                src="/Google_Pay_Logo.svg" 
+                                alt="Google Pay" 
+                                className="h-3.5 object-contain" 
+                            />
+
+                            {/* PhonePe Logo */}
+                            <img 
+                                src="/PhonePe_Logo.svg" 
+                                alt="PhonePe" 
+                                className="h-5 object-contain" 
+                            />
+
+                            {/* Paytm Logo */}
+                            <img 
+                                src="/Paytm.svg" 
+                                alt="Paytm" 
+                                className="h-3.5 object-contain" 
+                            />
                         </div>
                     </div>
                     </button>
 
                     <button onClick={() => handlePaymentAndSubmit('Cash')} disabled={isUploading} className="w-full p-4 border-2 border-blue-400 bg-blue-50 text-slate-800 rounded-2xl flex items-center gap-4 text-left group hover:border-blue-300 hover:bg-blue-100 transition-colors shadow-sm">
                         <div className="bg-orange-100 p-4 rounded-full border border-orange-200 flex items-center justify-center w-20 h-20">
+                          {/* Cash ke liye Rupee Icon */}
                           <IndianRupee className="w-10 h-10 text-orange-600" />
                         </div>
                         <div>
@@ -717,10 +711,12 @@ export default function CustomerPrintPortal() {
                                     localStorage.removeItem('printedTokens');
                                     localStorage.removeItem('hiddenTokens');
                                     localStorage.removeItem('rejectedTokens'); 
+                                    
                                     setSessionTokens([]);
                                     setPrintedTokens([]);
                                     setHiddenTokens([]);
                                     setRejectedTokens([]); 
+                                    
                                     setStep(1); 
                                 }
                             }}
@@ -816,88 +812,97 @@ export default function CustomerPrintPortal() {
         
       </main>
 
-      {/* 🌟 PREMIUM PAYMENT MODAL */}
-      {showQRModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in zoom-in-95 duration-200">
-          <div className="bg-white rounded-[1.5rem] shadow-2xl max-w-sm w-full overflow-hidden flex flex-col border border-slate-100">
-            <div className="bg-slate-50 p-6 text-center relative border-b border-slate-100">
-              <button 
-                onClick={() => setShowQRModal(false)} 
-                className="absolute top-4 right-4 p-2 bg-white text-slate-400 hover:bg-red-50 hover:text-red-500 rounded-full transition-colors shadow-sm border border-slate-200"
-              >
-                <X className="w-4 h-4 font-bold" />
-              </button>
+      {/* 🌟 PREMIUM PAYMENT MODAL (With Timer & Auto-Close) */}
+{showQRModal && (
+  <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in zoom-in-95 duration-200">
+    <div className="bg-white rounded-[1.5rem] shadow-2xl max-w-sm w-full overflow-hidden flex flex-col border border-slate-100">
 
-              <div className="absolute top-4 left-4 bg-red-50 text-red-600 px-2.5 py-1 rounded-md text-[10px] font-bold tracking-widest border border-red-100 flex items-center gap-1.5 animate-pulse">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-                </span>
-                {formatTime(timeLeft)}
-              </div>
+      {/* --- HEADER --- */}
+      <div className="bg-slate-50 p-6 text-center relative border-b border-slate-100">
+        <button 
+          onClick={() => setShowQRModal(false)} 
+          className="absolute top-4 right-4 p-2 bg-white text-slate-400 hover:bg-red-50 hover:text-red-500 rounded-full transition-colors shadow-sm border border-slate-200"
+        >
+          <X className="w-4 h-4 font-bold" />
+        </button>
 
-              <p className="text-xs font-bold text-slate-400 mb-1 uppercase tracking-widest mt-2">Total Payable</p>
-              <h2 className="text-4xl font-black text-slate-900 tracking-tight">₹{totalPrice}</h2>
-            </div>
+        {/* 🌟 Payment Timer */}
+        <div className="absolute top-4 left-4 bg-red-50 text-red-600 px-2.5 py-1 rounded-md text-[10px] font-bold tracking-widest border border-red-100 flex items-center gap-1.5 animate-pulse">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+          </span>
+          {formatTime(timeLeft)}
+        </div>
 
-            <div className="p-6 flex flex-col items-center">
-              <div className="flex flex-col items-center text-center mb-5">
-                 <div className="flex items-center gap-2 mb-1">
-                     <span className="text-sm font-bold text-slate-600">Scan to pay with</span>
-                     <img src="/UPI-Logo-vector.svg" alt="UPI" className="h-4 object-contain" />
-                 </div>
-                 <p className="text-[11px] text-slate-500 font-medium md:hidden">
-                   Redirecting to UPI App...
-                 </p>
-              </div>
+        <p className="text-xs font-bold text-slate-400 mb-1 uppercase tracking-widest mt-2">Total Payable</p>
+        <h2 className="text-4xl font-black text-slate-900 tracking-tight">₹{totalPrice}</h2>
+      </div>
 
-              <div className="relative p-3 bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.08)] border border-slate-100 mb-2">
-                <div className="absolute top-0 left-0 w-5 h-5 border-t-4 border-l-4 border-indigo-500 rounded-tl-xl"></div>
-                <div className="absolute top-0 right-0 w-5 h-5 border-t-4 border-r-4 border-indigo-500 rounded-tr-xl"></div>
-                <div className="absolute bottom-0 left-0 w-5 h-5 border-b-4 border-l-4 border-indigo-500 rounded-bl-xl"></div>
-                <div className="absolute bottom-0 right-0 w-5 h-5 border-b-4 border-r-4 border-indigo-500 rounded-br-xl"></div>
-                
-                <QRCode value={upiLink} size={160} level="H" fgColor="#0f172a" />
-              </div>
+      {/* --- BODY --- */}
+      <div className="p-6 flex flex-col items-center">
+        
+        {/* Helper Text */}
+        <div className="flex flex-col items-center text-center mb-5">
+           <div className="flex items-center gap-2 mb-1">
+               <span className="text-sm font-bold text-slate-600">Scan to pay with</span>
+               <img src="/UPI-Logo-vector.svg" alt="UPI" className="h-4 object-contain" />
+           </div>
+           <p className="text-[11px] text-slate-500 font-medium md:hidden">
+             Redirecting to UPI App...
+           </p>
+        </div>
 
-              <div className="w-full mt-4 pt-5 border-t border-slate-100">
-                <div className="flex items-center justify-center gap-6 opacity-70 mb-5">
-                    <img src="/Google_Pay_Logo.svg" alt="GPay" className="h-4 object-contain transition-all cursor-pointer" />
-                    <img src="/PhonePe_Logo.svg" alt="PhonePe" className="h-5 object-contain transition-all cursor-pointer" />
-                    <img src="/Paytm.svg" alt="Paytm" className="h-4 object-contain transition-all cursor-pointer" />
-                </div>
+        {/* Premium QR Wrapper */}
+        <div className="relative p-3 bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.08)] border border-slate-100 mb-2">
+          <div className="absolute top-0 left-0 w-5 h-5 border-t-4 border-l-4 border-indigo-500 rounded-tl-xl"></div>
+          <div className="absolute top-0 right-0 w-5 h-5 border-t-4 border-r-4 border-indigo-500 rounded-tr-xl"></div>
+          <div className="absolute bottom-0 left-0 w-5 h-5 border-b-4 border-l-4 border-indigo-500 rounded-bl-xl"></div>
+          <div className="absolute bottom-0 right-0 w-5 h-5 border-b-4 border-r-4 border-indigo-500 rounded-br-xl"></div>
+          
+          <QRCode value={upiLink} size={160} level="H" fgColor="#0f172a" />
+        </div>
 
-                <button 
-                  onClick={() => setShowQRModal(false)}
-                  disabled={isButtonDisabled}
-                  className={`w-full font-bold py-3.5 rounded-xl transition-all flex justify-center items-center gap-2 border ${
-                    isButtonDisabled 
-                      ? "bg-slate-50 text-slate-400 border-slate-200 cursor-not-allowed" 
-                      : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200 active:scale-95 shadow-sm"
-                  }`}
-                >
-                  {isButtonDisabled ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
-                      Please verify payment ({secondsToWait}s)
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle className="w-5 h-5" />
-                      I have paid, close this
-                    </>
-                  )}
-                </button>
-                <div className="flex justify-center items-center gap-1.5 text-slate-400 mt-3">
-                   <Lock className="w-3 h-3" />
-                   <span className="text-[10px] font-semibold tracking-wide uppercase">100% Secure Payment</span>
-                </div>
-              </div>
+        {/* --- FOOTER --- */}
+        <div className="w-full mt-4 pt-5 border-t border-slate-100">
+          <div className="flex items-center justify-center gap-6 opacity-70 mb-5">
+              <img src="/Google_Pay_Logo.svg" alt="GPay" className="h-4 object-contain  transition-all cursor-pointer" />
+              <img src="/PhonePe_Logo.svg" alt="PhonePe" className="h-5 object-contain  transition-all cursor-pointer" />
+              <img src="/Paytm.svg" alt="Paytm" className="h-4 object-contain  transition-all cursor-pointer" />
+          </div>
 
-            </div>
+          {/* 🌟 Dynamic "I Have Paid" Button */}
+          <button 
+            onClick={() => setShowQRModal(false)}
+            disabled={isButtonDisabled}
+            className={`w-full font-bold py-3.5 rounded-xl transition-all flex justify-center items-center gap-2 border ${
+              isButtonDisabled 
+                ? "bg-slate-50 text-slate-400 border-slate-200 cursor-not-allowed" 
+                : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200 active:scale-95 shadow-sm"
+            }`}
+          >
+            {isButtonDisabled ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
+                Please verify payment ({secondsToWait}s)
+              </>
+            ) : (
+              <>
+                <CheckCircle className="w-5 h-5" />
+                I have paid, close this
+              </>
+            )}
+          </button>
+          <div className="flex justify-center items-center gap-1.5 text-slate-400 mt-3">
+             <Lock className="w-3 h-3" />
+             <span className="text-[10px] font-semibold tracking-wide uppercase">100% Secure Payment</span>
           </div>
         </div>
-      )}
+
+      </div>
+    </div>
+  </div>
+)}
 
       <p className='mt-4 text-slate-400 items-center text-xs font-semibold'>Powered by Cafe Print</p>
       <Link href="/" className="flex items-center gap-3 group ">

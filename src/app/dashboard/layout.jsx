@@ -61,7 +61,10 @@ export default function DashboardLayout({ children }) {
       {children}
     </div>
   );
-
+  // 🌟 NAYA LOGIC: Agar URL studio ka hai, toh pura layout skip kar do
+  if (pathname === '/dashboard/studio') {
+    return <main className="w-full h-screen overflow-hidden">{children}</main>;
+  }
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col md:flex-row font-sans">
       
