@@ -344,9 +344,23 @@ export default function DashboardPage() {
     }
   };
 
-  if (status === 'loading' || loading) {
-    return <div className="min-h-screen flex items-center justify-center bg-gray-50"><RefreshCw className="animate-spin text-blue-500 w-10 h-10" /></div>;
-  }
+  if (status === "loading" || loading) {
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
+      <div className="relative">
+        {/* Printer */}
+        <Printer className="w-20 h-20 text-blue-600" />
+
+        {/* Moving Paper */}
+        <div className="absolute left-1/2 -translate-x-1/2 -top-5 w-8 h-4 bg-white border rounded animate-bounce"></div>
+      </div>
+
+      <p className="mt-6 text-lg font-medium text-gray-700 animate-pulse">
+        Loading...
+      </p>
+    </div>
+  );
+}
 
   return (
     <div className="p-6 md:p-8 bg-gray-50 min-h-screen">

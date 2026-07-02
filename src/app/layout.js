@@ -75,7 +75,7 @@ export default function RootLayout({ children }) {
         {/* 👇 Ye line add karni hai */}
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css" />
       </head>
-      <body className={inter.className}>
+      <body className={inter.className} suppressHydrationWarning={true}>
         <AuthProvider>
           {/* 🌟 सारा मैजिक अब इस Wrapper के अंदर होगा */}
           <ConditionalLayout>
